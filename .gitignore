@@ -1,0 +1,42 @@
+# ===============================
+# VARIABLES DE ENTORNO
+# ===============================
+.env
+.env.*
+!.env.example
+
+# ===============================
+# PYTHON
+# ===============================
+__pycache__/
+*.py[cod]
+*.pyo
+*.pyd
+*.egg-info/
+dist/
+build/
+venv/
+.envvenv/
+.venv/
+
+# ===============================
+# DJANGO
+# ===============================
+db.sqlite3
+staticfiles/
+media/
+
+# ===============================
+# NODE / FRONTEND
+# ===============================
+node_modules/
+dist/
+.vite/
+
+# ===============================
+# IDE / SISTEMA
+# ===============================
+.vscode/
+.idea/
+.DS_Store
+Thumbs.db
