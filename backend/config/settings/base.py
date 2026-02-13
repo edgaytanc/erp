@@ -30,7 +30,8 @@ INSTALLED_APPS = [
     "rest_framework",
     "drf_spectacular",
 
-    # Apps (las agregamos en E2-03)
+    # Apps
+    "apps.accounts",
     "apps.core",
     "apps.inventory",
     "apps.sales",
@@ -88,9 +89,17 @@ USE_TZ = True
 STATIC_URL = "static/"
 DEFAULT_AUTO_FIELD = "django.db.models.BigAutoField"
 
+AUTH_USER_MODEL = "accounts.User"
+
+
 # DRF + OpenAPI
 REST_FRAMEWORK = {
-    "DEFAULT_SCHEMA_CLASS": "drf_spectacular.openapi.AutoSchema",
+    "DEFAULT_AUTHENTICATION_CLASSES": (
+        "rest_framework_simplejwt.authentication.JWTAuthentication",
+    ),
+    "DEFAULT_PERMISSION_CLASSES": (
+        "rest_framework.permissions.IsAuthenticated",
+    ),
 }
 
 SPECTACULAR_SETTINGS = {
