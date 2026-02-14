@@ -1,0 +1,223 @@
+@startuml
+' =========================
+' ERP - ERD (MVP) - EPIC E4
+' =========================
+hide circle
+skinparam linetype ortho
+skinparam shadowing false
+skinparam dpi 160
+
+' ---------- CORE ----------
+entity "core_company" as Company {
+  * id : UUID <<PK>>
+  --
+  name : varchar
+  is_active : bool
+  created_at : datetime
+  updated_at : datetime
+}
+
+entity "core_branch" as Branch {
+  * id : UUID <<PK>>
+  --
+  company_id : UUID <<FK>>
+  name : varchar
+  code : varchar
+  is_active : bool
+  created_at : datetime
+  updated_at : datetime
+}
+
+Company ||--o{ Branch : "1..N"
+
+
+' ---------- ACCOUNTS ----------
+' Nota: tu proyecto puede usar un User custom o el default.
+' En E3 conectamos ventas con cashier_id (UUID) para desacoplar.
+entity "accounts_user" as User {
+  * id : UUID <<PK>>
+  --
+  email : varchar
+  is_admin : bool
+  is_purchases : bool
+  is_sales : bool
+  is_active : bool
+  created_at : datetime
+  updated_at : datetime
+}
+
+' (Si luego conectas cashier_id como FK real, aquí sería:)
+' User ||--o{ Sale : "cashier"
+
+
+' ---------- CONFIG ----------
+entity "config_company_settings" as CompanySettings {
+  * id : UUID <<PK>>
+  --
+  company_id : UUID <<FK, UNIQUE>>
+  currency_code : char(3)
+  currency_symbol : varchar
+  tax_rate : decimal(5,4)
+  money_rounding : decimal(6,4)
+  sale_void_window_minutes : int
+  is_active : bool
+  created_at : datetime
+  updated_at : datetime
+}
+
+Company ||--|| CompanySettings : "1..1"
+
+
+' ---------- INVENTORY ----------
+entity "inventory_product" as Product {
+  * id : UUID <<PK>>
+  --
+  sku : varchar <<IDX>>
+  name : varchar
+  sale_price : decimal(12,2)
+  is_active : bool
+  created_at : datetime
+  updated_at : datetime
+}
+
+entity "inventory_stock" as Stock {
+  * id : UUID <<PK>>
+  --
+  branch_id : UUID <<FK>>
+  product_id : UUID <<FK>>
+  qty_on_hand : decimal(14,3)
+  created_at : datetime
+  updated_at : datetime
+  --
+  <<UNIQUE(branch_id, product_id)>>
+}
+
+entity "inventory_stock_movement" as StockMovement {
+  * id : UUID <<PK>>
+  --
+  branch_id : UUID <<FK>>
+  product_id : UUID <<FK>>
+  type : varchar  ' IN / OUT / VOID / ADJUST (según tu enum)
+  qty : decimal(14,3)
+  unit_cost : decimal(12,2)  ' nullable según tipo
+  reference_type : varchar   ' SALE / PURCHASE / VOID ...
+  reference_id : UUID
+  note : text
+  created_at : datetime <<IDX>>
+}
+
+Branch ||--o{ Stock : "1..N"
+Product ||--o{ Stock : "1..N"
+
+Branch ||--o{ StockMovement : "1..N"
+Product ||--o{ StockMovement : "1..N"
+
+
+' ---------- SALES ----------
+entity "sales_sale" as Sale {
+  * id : UUID <<PK>>
+  --
+  branch_id : UUID <<FK>>
+  cashier_id : UUID <<IDX>> ' desacoplado de User por ahora
+  status : varchar <<IDX>>  ' DRAFT / CONFIRMED / VOID
+  payment_method : varchar
+  subtotal : decimal(14,2)
+  tax : decimal(14,2)
+  total : decimal(14,2)
+  sold_at : datetime <<IDX>>
+  voided_at : datetime
+  void_reason : text
+  created_at : datetime
+  updated_at : datetime
+  --
+  <<IDX(branch_id, sold_at)>>
+  <<IDX(cashier_id, sold_at)>>
+}
+
+entity "sales_sale_item" as SaleItem {
+  * id : UUID <<PK>>
+  --
+  sale_id : UUID <<FK>>
+  product_id : UUID <<FK>>
+  qty : decimal(14,3)
+  unit_price : decimal(12,2)
+  subtotal : decimal(14,2)
+  created_at : datetime
+  updated_at : datetime
+  --
+  <<IDX(sale_id)>>
+  <<IDX(product_id)>>
+}
+
+Branch  ||--o{ Sale : "1..N"
+Sale    ||--o{ SaleItem : "1..N"
+Product ||--o{ SaleItem : "1..N"
+
+
+' ---------- PURCHASES ----------
+entity "purchases_supplier" as Supplier {
+  * id : UUID <<PK>>
+  --
+  name : varchar <<IDX>>
+  contact_name : varchar
+  phone : varchar
+  address : text
+  is_active : bool
+  created_at : datetime
+  updated_at : datetime
+}
+
+entity "purchases_purchase" as Purchase {
+  * id : UUID <<PK>>
+  --
+  branch_id : UUID <<FK>>
+  supplier_id : UUID <<FK>>
+  invoice_number : varchar <<IDX>>
+  status : varchar <<IDX>> ' DRAFT / CONFIRMED / CANCELLED
+  purchased_at : datetime <<IDX>>
+  total_cost : decimal(14,2)
+  cancelled_at : datetime <<IDX>>
+  cancel_reason : text
+  created_at : datetime
+  updated_at : datetime
+  --
+  <<IDX(branch_id, purchased_at)>>
+  <<IDX(supplier_id, purchased_at)>>
+  <<IDX(branch_id, cancelled_at)>>
+}
+
+entity "purchases_purchase_item" as PurchaseItem {
+  * id : UUID <<PK>>
+  --
+  purchase_id : UUID <<FK>>
+  product_id : UUID <<FK>>
+  qty : decimal(14,3)
+  unit_cost : decimal(12,2)
+  subtotal : decimal(14,2)
+  created_at : datetime
+  updated_at : datetime
+  --
+  <<IDX(purchase_id)>>
+  <<IDX(product_id)>>
+}
+
+Branch   ||--o{ Purchase : "1..N"
+Supplier ||--o{ Purchase : "1..N"
+Purchase ||--o{ PurchaseItem : "1..N"
+Product  ||--o{ PurchaseItem : "1..N"
+
+
+' ---------- REFERENCIAS LÓGICAS (no FK real) ----------
+' StockMovement.reference_id apunta a:
+'  - Sale.id cuando reference_type=SALE
+'  - Purchase.id cuando reference_type=PURCHASE
+'  - Sale.id cuando reference_type=VOID (anulación de venta)
+note right of StockMovement
+reference_type + reference_id:
+- SALE      -> sales_sale.id
+- PURCHASE  -> purchases_purchase.id
+- VOID      -> sales_sale.id
+(end)
+end note
+
+@enduml

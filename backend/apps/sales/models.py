@@ -1,3 +1,63 @@
+import uuid
+from decimal import Decimal
 from django.db import models
+from django.core.validators import MinValueValidator
+from apps.core.models import TimeStampedModel, Branch
+from apps.inventory.models import Product
 
-# Create your models here.
+
+class SaleStatus(models.TextChoices):
+    DRAFT = "DRAFT", "DRAFT"
+    CONFIRMED = "CONFIRMED", "CONFIRMED"
+    VOID = "VOID", "VOID"
+
+
+class Sale(TimeStampedModel):
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+
+    branch = models.ForeignKey(Branch, on_delete=models.PROTECT, related_name="sales")
+
+    # En E3 ya tenés auth/usuarios: aquí dejamos UUID para desacoplar, lo conectamos luego con FK al User model real.
+    cashier_id = models.UUIDField(db_index=True)
+
+    status = models.CharField(max_length=12, choices=SaleStatus.choices, default=SaleStatus.DRAFT, db_index=True)
+    payment_method = models.CharField(max_length=32, blank=True, default="")
+
+    subtotal = models.DecimalField(max_digits=14, decimal_places=2, validators=[MinValueValidator(Decimal("0.00"))], default=Decimal("0.00"))
+    tax = models.DecimalField(max_digits=14, decimal_places=2, validators=[MinValueValidator(Decimal("0.00"))], default=Decimal("0.00"))
+    total = models.DecimalField(max_digits=14, decimal_places=2, validators=[MinValueValidator(Decimal("0.00"))], default=Decimal("0.00"))
+
+    sold_at = models.DateTimeField(null=True, blank=True, db_index=True)
+    voided_at = models.DateTimeField(null=True, blank=True)
+    void_reason = models.TextField(blank=True, default="")
+
+    class Meta:
+        db_table = "sales_sale"
+        indexes = [
+            models.Index(fields=["branch", "sold_at"], name="ix_sale_branch_dt"),
+            models.Index(fields=["cashier_id", "sold_at"], name="ix_sale_cashier_dt"),
+        ]
+
+    def __str__(self) -> str:
+        return f"Venta {self.id} - {self.status}"
+
+
+class SaleItem(TimeStampedModel):
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+
+    sale = models.ForeignKey(Sale, on_delete=models.CASCADE, related_name="items")
+    product = models.ForeignKey(Product, on_delete=models.PROTECT, related_name="sale_items")
+
+    qty = models.DecimalField(max_digits=14, decimal_places=3, validators=[MinValueValidator(Decimal("0.001"))])
+    unit_price = models.DecimalField(max_digits=12, decimal_places=2, validators=[MinValueValidator(Decimal("0.00"))])
+    subtotal = models.DecimalField(max_digits=14, decimal_places=2, validators=[MinValueValidator(Decimal("0.00"))])
+
+    class Meta:
+        db_table = "sales_sale_item"
+        indexes = [
+            models.Index(fields=["sale"], name="ix_sale_item_sale"),
+            models.Index(fields=["product"], name="ix_sale_item_product"),
+        ]
+
+    def __str__(self) -> str:
+        return f"{self.product_id} x {self.qty}"
