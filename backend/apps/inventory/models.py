@@ -1,58 +1,195 @@
-# backend/apps/inventory/models.py
+import uuid
+from decimal import Decimal
+
 from django.db import models
+from django.core.validators import MinValueValidator
+
+from apps.core.models import TimeStampedModel, Branch
 
 
-class Product(models.Model):
-    sku = models.CharField(max_length=50, unique=True)
-    name = models.CharField(max_length=200)
-    description = models.TextField(blank=True, default="")
-    unit = models.CharField(max_length=20, default="unidad")  # unidad, lb, caja, etc.
+class Category(TimeStampedModel):
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
 
-    # Precio de venta (IVA incluido según negocio; ventas lo manejará, aquí solo guardamos el precio)
-    sale_price = models.DecimalField(max_digits=12, decimal_places=2, default=0)
-
-    is_active = models.BooleanField(default=True)
-
-    created_at = models.DateTimeField(auto_now_add=True)
-    updated_at = models.DateTimeField(auto_now=True)
+    name = models.CharField(max_length=255, db_index=True)
+    parent = models.ForeignKey(
+        "self",
+        null=True,
+        blank=True,
+        on_delete=models.PROTECT,
+        related_name="children",
+    )
+    is_active = models.BooleanField(default=True, db_index=True)
 
     class Meta:
+        db_table = "inventory_category"
+        unique_together = [("parent", "name")]
+
+    def __str__(self) -> str:
+        return self.name
+
+
+class Product(TimeStampedModel):
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+
+    category = models.ForeignKey(
+        Category,
+        null=True,
+        blank=True,
+        on_delete=models.PROTECT,
+        related_name="products",
+    )
+
+    sku = models.CharField(max_length=64, unique=True, db_index=True)
+    barcode = models.CharField(
+        max_length=64,
+        unique=True,
+        null=True,
+        blank=True,
+        db_index=True,
+    )
+
+    name = models.CharField(max_length=255, db_index=True)
+    description = models.TextField(blank=True, default="")
+
+    # Precio de venta con IVA incluido (según tu negocio)
+    sale_price = models.DecimalField(
+        max_digits=12,
+        decimal_places=2,
+        validators=[MinValueValidator(Decimal("0.00"))],
+    )
+    cost_price = models.DecimalField(
+        max_digits=12,
+        decimal_places=2,
+        validators=[MinValueValidator(Decimal("0.00"))],
+        default=Decimal("0.00"),
+    )
+    min_stock = models.DecimalField(
+        max_digits=12,
+        decimal_places=2,
+        validators=[MinValueValidator(Decimal("0.00"))],
+        default=Decimal("0.00"),
+    )
+
+    is_active = models.BooleanField(default=True, db_index=True)
+
+    class Meta:
+        db_table = "inventory_product"
         indexes = [
-            models.Index(fields=["name"]),
-            models.Index(fields=["is_active"]),
+            models.Index(fields=["name"], name="ix_product_name"),
+            models.Index(fields=["category"], name="ix_product_category"),
         ]
 
-    def __str__(self):
+    def __str__(self) -> str:
         return f"{self.sku} - {self.name}"
 
 
-class StockMovement(models.Model):
-    class MovementType(models.TextChoices):
-        PURCHASE = "PURCHASE", "Compra"
-        SALE = "SALE", "Venta"
-        SALE_VOID = "SALE_VOID", "Anulación de venta"
-        ADJUST = "ADJUST", "Ajuste"
-        IN = "IN", "Entrada"
-        OUT = "OUT", "Salida"
+class Stock(TimeStampedModel):
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
 
-    product = models.ForeignKey(Product, on_delete=models.PROTECT, related_name="movements")
-    movement_type = models.CharField(max_length=20, choices=MovementType.choices)
+    branch = models.ForeignKey(
+        Branch,
+        on_delete=models.PROTECT,
+        related_name="stocks",
+    )
+    product = models.ForeignKey(
+        Product,
+        on_delete=models.PROTECT,
+        related_name="stocks",
+    )
 
-    # Cantidad positiva SIEMPRE.
-    # El efecto en stock lo define movement_type (venta resta, compra suma, anulación suma, etc.)
-    quantity = models.DecimalField(max_digits=12, decimal_places=3)
-
-    # Referencia opcional (luego se conectará con ventas/compras)
-    reference = models.CharField(max_length=100, blank=True, default="")
-
-    note = models.TextField(blank=True, default="")
-    occurred_at = models.DateTimeField(auto_now_add=True)
+    qty_on_hand = models.DecimalField(
+        max_digits=14,
+        decimal_places=3,
+        validators=[MinValueValidator(Decimal("0.000"))],
+        default=Decimal("0.000"),
+    )
 
     class Meta:
+        db_table = "inventory_stock"
+        constraints = [
+            models.UniqueConstraint(
+                fields=["branch", "product"],
+                name="uq_stock_branch_product",
+            ),
+        ]
         indexes = [
-            models.Index(fields=["product", "occurred_at"]),
-            models.Index(fields=["movement_type"]),
+            models.Index(fields=["branch", "product"], name="ix_stock_branch_product"),
         ]
 
-    def __str__(self):
-        return f"{self.movement_type} {self.product.sku} x {self.quantity}"
+    def __str__(self) -> str:
+        return f"{self.branch_id} {self.product_id} = {self.qty_on_hand}"
+
+
+class MovementType(models.TextChoices):
+    IN_ = "IN", "IN"
+    OUT = "OUT", "OUT"
+    ADJUST = "ADJUST", "ADJUST"
+    VOID = "VOID", "VOID"
+
+
+class ReferenceType(models.TextChoices):
+    SALE = "SALE", "SALE"
+    PURCHASE = "PURCHASE", "PURCHASE"
+    ADJUSTMENT = "ADJUSTMENT", "ADJUSTMENT"
+    VOID = "VOID", "VOID"
+
+
+class StockMovement(TimeStampedModel):
+    """
+    Mantengo este nombre porque tu API ya lo usa:
+    from .models import Product, StockMovement
+
+    Tabla física: inventory_movement
+    """
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+
+    branch = models.ForeignKey(
+        Branch,
+        on_delete=models.PROTECT,
+        related_name="movements",
+        null=True,
+        blank=True,
+    )
+    product = models.ForeignKey(
+        Product,
+        on_delete=models.PROTECT,
+        related_name="movements",
+    )
+
+    type = models.CharField(
+        max_length=12,
+        choices=MovementType.choices,
+        db_index=True,
+    )
+    qty = models.DecimalField(
+        max_digits=14,
+        decimal_places=3,
+        validators=[MinValueValidator(Decimal("0.001"))],
+    )
+
+    unit_cost = models.DecimalField(
+        max_digits=12,
+        decimal_places=2,
+        validators=[MinValueValidator(Decimal("0.00"))],
+        null=True,
+        blank=True,
+    )
+
+    reference_type = models.CharField(
+        max_length=16,
+        choices=ReferenceType.choices,
+        db_index=True,
+    )
+    reference_id = models.UUIDField(null=True, blank=True, db_index=True)
+
+    note = models.TextField(blank=True, default="")
+
+    class Meta:
+        db_table = "inventory_movement"
+        indexes = [
+            models.Index(fields=["branch", "product", "created_at"], name="ix_mov_branch_prod_dt"),
+            models.Index(fields=["reference_type", "reference_id"], name="ix_mov_ref"),
+        ]
+
+    def __str__(self) -> str:
+        return f"{self.type} {self.qty} {self.product_id} @ {self.branch_id}"
