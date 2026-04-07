@@ -111,6 +111,7 @@ class StockMovementSerializer(serializers.ModelSerializer):
     product_sku = serializers.CharField(source="product.sku", read_only=True)
     product_name = serializers.CharField(source="product.name", read_only=True)
     branch_name = serializers.CharField(source="branch.name", read_only=True)
+    created_by_username = serializers.CharField(source="created_by.username", read_only=True)
 
     class Meta:
         model = StockMovement
@@ -123,9 +124,13 @@ class StockMovementSerializer(serializers.ModelSerializer):
             "product_name",
             "type",
             "qty",
-            "unit_cost",
+            "stock_before",
+            "stock_after",
             "reference_type",
             "reference_id",
+            "unit_cost",
+            "created_by",
+            "created_by_username",
             "note",
             "created_at",
         ]

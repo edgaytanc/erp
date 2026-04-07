@@ -1,12 +1,13 @@
 from __future__ import annotations
 
 from decimal import Decimal, ROUND_HALF_UP
+
 from django.db import transaction
 from django.utils import timezone
 
 from apps.inventory.services import apply_inventory_movement, BusinessRuleError
-from apps.inventory.models import MovementType, ReferenceType
-from .models import Purchase, PurchaseItem, PurchaseStatus
+from apps.inventory.models import StockMovement, ReferenceType
+from .models import Purchase, PurchaseStatus
 
 
 class PurchaseServiceError(BusinessRuleError):
@@ -60,7 +61,7 @@ def confirm_purchase(purchase_id) -> Purchase:
         apply_inventory_movement(
             branch=purchase.branch,
             product=item.product,
-            movement_type=MovementType.IN_,
+            movement_type=StockMovement.Type.IN,
             qty=item.qty,
             unit_cost=item.unit_cost,
             reference_type=ReferenceType.PURCHASE,
@@ -72,21 +73,23 @@ def confirm_purchase(purchase_id) -> Purchase:
     purchase.total_cost = _money(total_cost)
     purchase.status = PurchaseStatus.CONFIRMED
     purchase.purchased_at = purchase.purchased_at or timezone.now()
-
-    # Si estaba cancelada (no debería), limpiamos campos
     purchase.cancelled_at = None
     purchase.cancel_reason = ""
-
-    purchase.save(update_fields=["total_cost", "status", "purchased_at", "cancelled_at", "cancel_reason", "updated_at"])
+    purchase.save(
+        update_fields=[
+            "total_cost",
+            "status",
+            "purchased_at",
+            "cancelled_at",
+            "cancel_reason",
+            "updated_at",
+        ]
+    )
     return purchase
 
 
 @transaction.atomic
 def cancel_purchase(purchase_id, *, reason: str = "") -> Purchase:
-    """
-    Cancela una compra SOLO si está DRAFT.
-    No afecta inventario (porque no fue confirmada).
-    """
     purchase = (
         Purchase.objects.select_for_update()
         .select_related("branch", "supplier")

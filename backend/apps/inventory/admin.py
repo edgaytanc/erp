@@ -26,6 +26,17 @@ class StockAdmin(admin.ModelAdmin):
 
 @admin.register(StockMovement)
 class StockMovementAdmin(admin.ModelAdmin):
-    list_display = ("created_at", "branch", "product", "type", "qty", "reference_type")
+    list_display = (
+        "created_at",
+        "branch",
+        "product",
+        "type",
+        "qty",
+        "reference_type",
+        "reference_id",
+        "stock_before",
+        "stock_after",
+        "created_by",
+    )
     list_filter = ("type", "reference_type", "branch")
-    search_fields = ("product__sku", "product__name", "note")
+    search_fields = ("product__sku", "product__name", "reference_id", "note")

@@ -1,12 +1,17 @@
 from __future__ import annotations
 
 from decimal import Decimal, ROUND_HALF_UP
+
 from django.db import transaction
 from django.utils import timezone
 
-from apps.config_module.services import get_tax_rate, get_money_rounding, get_sale_void_window_minutes
+from apps.config_module.services import (
+    get_tax_rate,
+    get_money_rounding,
+    get_sale_void_window_minutes,
+)
 from apps.inventory.services import apply_inventory_movement, BusinessRuleError
-from apps.inventory.models import MovementType, ReferenceType
+from apps.inventory.models import StockMovement, ReferenceType
 from .models import Sale, SaleItem, SaleStatus
 
 
@@ -65,7 +70,7 @@ def recompute_totals_for_update(sale: Sale) -> tuple[Decimal, Decimal, Decimal]:
         subtotal_sin_iva = total_con_iva
         iva = Decimal("0.00")
     else:
-        divisor = (Decimal("1.00") + tax_rate)
+        divisor = Decimal("1.00") + tax_rate
         subtotal_sin_iva = _money(total_con_iva / divisor, rounding)
         iva = _money(total_con_iva - subtotal_sin_iva, rounding)
 
@@ -109,7 +114,7 @@ def confirm_sale(sale_id, *, cashier_id) -> Sale:
         apply_inventory_movement(
             branch=sale.branch,
             product=item.product,
-            movement_type=MovementType.OUT,
+            movement_type=StockMovement.Type.OUT,
             qty=item.qty,
             unit_cost=None,
             reference_type=ReferenceType.SALE,
@@ -126,12 +131,6 @@ def confirm_sale(sale_id, *, cashier_id) -> Sale:
 
 @transaction.atomic
 def void_sale(sale_id, *, user, cashier_id, reason: str = "") -> Sale:
-    """
-    Regla:
-    - Admin: puede anular siempre.
-    - Sales: solo puede anular dentro de X minutos desde sold_at (configurable).
-      * Si X=0 => Sales no puede anular nunca.
-    """
     sale = (
         Sale.objects.select_for_update()
         .select_related("branch__company")
@@ -146,10 +145,8 @@ def void_sale(sale_id, *, user, cashier_id, reason: str = "") -> Sale:
         raise SaleServiceError("Solo se puede anular una venta confirmada.")
 
     if not sale.sold_at:
-        # Caso raro, pero si está CONFIRMED debería tener sold_at
         raise SaleServiceError("La venta confirmada no tiene sold_at. No se puede evaluar ventana de anulación.")
 
-    # ✅ Evaluación de ventana para no-admin
     if not _is_admin(user):
         window_minutes = get_sale_void_window_minutes(sale.branch.company)
 
@@ -173,10 +170,10 @@ def void_sale(sale_id, *, user, cashier_id, reason: str = "") -> Sale:
         apply_inventory_movement(
             branch=sale.branch,
             product=item.product,
-            movement_type=MovementType.VOID,
+            movement_type=StockMovement.Type.IN,
             qty=item.qty,
             unit_cost=None,
-            reference_type=ReferenceType.VOID,
+            reference_type=ReferenceType.SALE_VOID,
             reference_id=sale.id,
             note=f"Anulación de venta. Motivo: {reason or '-'}",
             prevent_negative=True,

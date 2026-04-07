@@ -1,13 +1,20 @@
 from decimal import Decimal
 
 from django.contrib.auth import get_user_model
+from django.test import TestCase
 from django.urls import reverse
 from rest_framework import status
 from rest_framework.test import APITestCase
 
 from apps.core.models import Branch, Company
-from apps.inventory.models import Category, Product, ReferenceType
-from apps.inventory.services import apply_inventory_movement
+from apps.inventory.models import Category, Product, ReferenceType, Stock, StockMovement
+from apps.inventory.services import (
+    apply_inventory_movement,
+    register_adjustment,
+    register_purchase_entry,
+    register_sale_output,
+    register_sale_void_entry,
+)
 
 
 class InventoryAPITestCase(APITestCase):
@@ -66,6 +73,7 @@ class InventoryAPITestCase(APITestCase):
             reference_type=ReferenceType.PURCHASE,
             reference_id=None,
             unit_cost=Decimal("7.50"),
+            created_by=self.admin_user,
         )
 
         url = reverse("inventory-stocks-list")
@@ -85,6 +93,7 @@ class InventoryAPITestCase(APITestCase):
             reference_type=ReferenceType.PURCHASE,
             reference_id=None,
             unit_cost=Decimal("7.50"),
+            created_by=self.admin_user,
         )
 
         url = reverse("inventory-stocks-summary")
@@ -93,3 +102,128 @@ class InventoryAPITestCase(APITestCase):
         self.assertEqual(response.status_code, status.HTTP_200_OK)
         self.assertEqual(response.data["low_stock_count"], 1)
         self.assertEqual(response.data["lowest_items"][0]["sku"], "ARROZ-001")
+
+
+class InventoryServiceIntegrationTestCase(TestCase):
+    def setUp(self):
+        self.user_model = get_user_model()
+        self.admin_user = self.user_model.objects.create_user(
+            username="inventory_admin",
+            password="admin123",
+            role="admin",
+        )
+        self.company = Company.objects.create(name="ERP Demo")
+        self.branch = Branch.objects.create(company=self.company, name="Central")
+        self.category = Category.objects.create(name="General")
+        self.product = Product.objects.create(
+            category=self.category,
+            sku="PROD-001",
+            name="Producto demo",
+            sale_price=Decimal("25.00"),
+            cost_price=Decimal("10.00"),
+            min_stock=Decimal("5.00"),
+        )
+
+    def test_purchase_entry_creates_auditable_movement_and_updates_stock(self):
+        movement = register_purchase_entry(
+            branch=self.branch,
+            product=self.product,
+            qty=Decimal("10.00"),
+            purchase_id=123,
+            unit_cost=Decimal("9.50"),
+            created_by=self.admin_user,
+        )
+
+        stock = Stock.objects.get(branch=self.branch, product=self.product)
+
+        self.assertEqual(movement.type, StockMovement.Type.IN)
+        self.assertEqual(movement.reference_type, ReferenceType.PURCHASE)
+        self.assertEqual(movement.reference_id, "123")
+        self.assertEqual(movement.stock_before, Decimal("0.00"))
+        self.assertEqual(movement.stock_after, Decimal("10.00"))
+        self.assertEqual(stock.qty_on_hand, Decimal("10.00"))
+
+    def test_sale_output_decreases_stock_and_stores_before_after(self):
+        register_purchase_entry(
+            branch=self.branch,
+            product=self.product,
+            qty=Decimal("10.00"),
+            purchase_id=123,
+            created_by=self.admin_user,
+        )
+
+        movement = register_sale_output(
+            branch=self.branch,
+            product=self.product,
+            qty=Decimal("4.00"),
+            sale_id=456,
+            created_by=self.admin_user,
+        )
+
+        stock = Stock.objects.get(branch=self.branch, product=self.product)
+
+        self.assertEqual(movement.type, StockMovement.Type.OUT)
+        self.assertEqual(movement.stock_before, Decimal("10.00"))
+        self.assertEqual(movement.stock_after, Decimal("6.00"))
+        self.assertEqual(stock.qty_on_hand, Decimal("6.00"))
+
+    def test_sale_void_restores_stock(self):
+        register_purchase_entry(
+            branch=self.branch,
+            product=self.product,
+            qty=Decimal("10.00"),
+            purchase_id=123,
+            created_by=self.admin_user,
+        )
+        register_sale_output(
+            branch=self.branch,
+            product=self.product,
+            qty=Decimal("4.00"),
+            sale_id=456,
+            created_by=self.admin_user,
+        )
+
+        movement = register_sale_void_entry(
+            branch=self.branch,
+            product=self.product,
+            qty=Decimal("4.00"),
+            sale_id=456,
+            created_by=self.admin_user,
+        )
+
+        stock = Stock.objects.get(branch=self.branch, product=self.product)
+        self.assertEqual(movement.reference_type, ReferenceType.SALE_VOID)
+        self.assertEqual(movement.stock_before, Decimal("6.00"))
+        self.assertEqual(movement.stock_after, Decimal("10.00"))
+        self.assertEqual(stock.qty_on_hand, Decimal("10.00"))
+
+    def test_negative_stock_is_blocked(self):
+        with self.assertRaisesMessage(Exception, "Stock insuficiente"):
+            register_sale_output(
+                branch=self.branch,
+                product=self.product,
+                qty=Decimal("1.00"),
+                sale_id=999,
+                created_by=self.admin_user,
+            )
+
+    def test_adjustment_out_reduces_stock(self):
+        register_purchase_entry(
+            branch=self.branch,
+            product=self.product,
+            qty=Decimal("8.00"),
+            purchase_id=321,
+            created_by=self.admin_user,
+        )
+
+        movement = register_adjustment(
+            branch=self.branch,
+            product=self.product,
+            qty=Decimal("-3.00"),
+            created_by=self.admin_user,
+            note="Merma",
+        )
+
+        stock = Stock.objects.get(branch=self.branch, product=self.product)
+        self.assertEqual(movement.type, StockMovement.Type.OUT)
+        self.assertEqual(stock.qty_on_hand, Decimal("5.00"))
