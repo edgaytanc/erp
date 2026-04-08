@@ -5,13 +5,9 @@ from decimal import Decimal, ROUND_HALF_UP
 from django.db import transaction
 from django.utils import timezone
 
-from apps.config_module.services import (
-    get_tax_rate,
-    get_money_rounding,
-    get_sale_void_window_minutes,
-)
-from apps.inventory.services import apply_inventory_movement, BusinessRuleError
-from apps.inventory.models import StockMovement, ReferenceType
+from apps.config_module.services import get_money_rounding, get_sale_void_window_minutes, get_tax_rate
+from apps.inventory.models import ReferenceType, StockMovement
+from apps.inventory.services import BusinessRuleError, apply_inventory_movement
 from .models import Sale, SaleItem, SaleStatus
 
 
@@ -26,8 +22,7 @@ def _d(value) -> Decimal:
 
 
 def _money(value: Decimal, rounding: Decimal) -> Decimal:
-    rounding = _d(rounding)
-    return _d(value).quantize(rounding, rounding=ROUND_HALF_UP)
+    return _d(value).quantize(_d(rounding), rounding=ROUND_HALF_UP)
 
 
 def _is_admin(user) -> bool:
@@ -38,28 +33,32 @@ def _is_admin(user) -> bool:
 def recompute_totals_for_update(sale: Sale) -> tuple[Decimal, Decimal, Decimal]:
     sale_locked = Sale.objects.select_for_update().select_related("branch__company").get(pk=sale.pk)
 
+    if not sale_locked.branch.is_active:
+        raise SaleServiceError("No se puede procesar una venta para una sucursal inactiva.")
+
     company = sale_locked.branch.company
     tax_rate = _d(get_tax_rate(company))
     rounding = _d(get_money_rounding(company))
 
-    items = list(SaleItem.objects.select_for_update().filter(sale=sale_locked).all())
+    items = list(SaleItem.objects.select_for_update().select_related("product").filter(sale=sale_locked))
     if not items:
         raise SaleServiceError("No se puede procesar una venta sin items.")
 
     total_con_iva = Decimal("0.00")
-
-    for it in items:
-        if it.qty <= 0:
+    for item in items:
+        if not item.product.is_active:
+            raise SaleServiceError(f"El producto '{item.product.sku} - {item.product.name}' está inactivo.")
+        if item.qty <= 0:
             raise SaleServiceError("La venta tiene items con cantidad inválida.")
-        if it.unit_price < 0:
+        if item.unit_price < 0:
             raise SaleServiceError("La venta tiene items con precio inválido.")
 
-        expected = _money(_d(it.qty) * _d(it.unit_price), rounding)
-        if it.subtotal != expected:
-            it.subtotal = expected
-            it.save(update_fields=["subtotal", "updated_at"])
+        expected_subtotal = _money(_d(item.qty) * _d(item.unit_price), rounding)
+        if item.subtotal != expected_subtotal:
+            item.subtotal = expected_subtotal
+            item.save(update_fields=["subtotal", "updated_at"])
 
-        total_con_iva += it.subtotal
+        total_con_iva += item.subtotal
 
     total_con_iva = _money(total_con_iva, rounding)
 
@@ -74,14 +73,12 @@ def recompute_totals_for_update(sale: Sale) -> tuple[Decimal, Decimal, Decimal]:
         subtotal_sin_iva = _money(total_con_iva / divisor, rounding)
         iva = _money(total_con_iva - subtotal_sin_iva, rounding)
 
-    total = total_con_iva
-
     sale_locked.subtotal = subtotal_sin_iva
     sale_locked.tax = iva
-    sale_locked.total = total
+    sale_locked.total = total_con_iva
     sale_locked.save(update_fields=["subtotal", "tax", "total", "updated_at"])
 
-    return subtotal_sin_iva, iva, total
+    return subtotal_sin_iva, iva, total_con_iva
 
 
 @transaction.atomic
@@ -102,11 +99,13 @@ def confirm_sale(sale_id, *, cashier_id) -> Sale:
     if cashier_id is None:
         raise SaleServiceError("cashier_id es requerido para confirmar la venta.")
 
-    sale.cashier_id = cashier_id
+    if not sale.branch.is_active:
+        raise SaleServiceError("No se puede confirmar una venta en una sucursal inactiva.")
 
+    sale.cashier_id = cashier_id
     recompute_totals_for_update(sale)
 
-    items = list(sale.items.all())
+    items = list(sale.items.select_related("product").all())
     if not items:
         raise SaleServiceError("No se puede confirmar una venta sin items.")
 
@@ -145,26 +144,23 @@ def void_sale(sale_id, *, user, cashier_id, reason: str = "") -> Sale:
         raise SaleServiceError("Solo se puede anular una venta confirmada.")
 
     if not sale.sold_at:
-        raise SaleServiceError("La venta confirmada no tiene sold_at. No se puede evaluar ventana de anulación.")
+        raise SaleServiceError("La venta confirmada no tiene sold_at. No se puede evaluar la anulación.")
 
     if not _is_admin(user):
         window_minutes = get_sale_void_window_minutes(sale.branch.company)
-
         if window_minutes <= 0:
-            raise SaleServiceError("No tienes permiso para anular ventas (ventana de anulación = 0).")
+            raise SaleServiceError("No tienes permiso para anular ventas.")
 
-        delta = timezone.now() - sale.sold_at
-        delta_minutes = delta.total_seconds() / 60.0
-
+        delta_minutes = (timezone.now() - sale.sold_at).total_seconds() / 60.0
         if delta_minutes > window_minutes:
             raise SaleServiceError(
                 f"Ventana de anulación vencida. Han pasado {int(delta_minutes)} min "
                 f"(máximo permitido: {window_minutes} min)."
             )
 
-    items = list(sale.items.all())
+    items = list(sale.items.select_related("product").all())
     if not items:
-        raise SaleServiceError("La venta no tiene items para anular (estado inválido).")
+        raise SaleServiceError("La venta no tiene items para anular.")
 
     for item in items:
         apply_inventory_movement(
@@ -182,9 +178,7 @@ def void_sale(sale_id, *, user, cashier_id, reason: str = "") -> Sale:
     sale.status = SaleStatus.VOID
     sale.voided_at = timezone.now()
     sale.void_reason = reason or ""
-
     if sale.cashier_id is None:
         sale.cashier_id = cashier_id
-
     sale.save(update_fields=["status", "voided_at", "void_reason", "cashier_id", "updated_at"])
     return sale

@@ -1,34 +1,44 @@
 from __future__ import annotations
 
-from decimal import Decimal
+from decimal import Decimal, ROUND_HALF_UP
+
 from rest_framework import serializers
 
-from apps.inventory.models import Product
 from .models import Sale, SaleItem, SaleStatus
 
 
 class SaleItemSerializer(serializers.ModelSerializer):
+    product_sku = serializers.CharField(source="product.sku", read_only=True)
+    product_name = serializers.CharField(source="product.name", read_only=True)
+
     class Meta:
         model = SaleItem
         fields = [
             "id",
             "sale",
             "product",
+            "product_sku",
+            "product_name",
             "qty",
             "unit_price",
             "subtotal",
             "created_at",
             "updated_at",
         ]
-        read_only_fields = ["id", "created_at", "updated_at"]
-        extra_kwargs = {
-            "sale": {"required": False},
-            "subtotal": {"required": False},
-        }
+        read_only_fields = [
+            "id",
+            "sale",
+            "subtotal",
+            "created_at",
+            "updated_at",
+            "product_sku",
+            "product_name",
+        ]
 
 
 class SaleSerializer(serializers.ModelSerializer):
-    items = SaleItemSerializer(many=True, required=False)
+    items = SaleItemSerializer(many=True, required=True)
+    cashier_id = serializers.SerializerMethodField()
 
     class Meta:
         model = Sale
@@ -62,6 +72,15 @@ class SaleSerializer(serializers.ModelSerializer):
             "updated_at",
         ]
 
+    def get_cashier_id(self, obj):
+        if obj.cashier_id is None:
+            return None
+        return str(obj.cashier_id)
+
+    @staticmethod
+    def _money(value: Decimal) -> Decimal:
+        return Decimal(str(value)).quantize(Decimal("0.01"), rounding=ROUND_HALF_UP)
+
     def _get_request_user(self):
         request = self.context.get("request")
         user = getattr(request, "user", None)
@@ -76,69 +95,65 @@ class SaleSerializer(serializers.ModelSerializer):
         return user.id
 
     def _can_override_price(self, user) -> bool:
-        # Admin puede override
         return bool(getattr(user, "is_admin", lambda: False)())
 
     def validate(self, attrs):
-        """
-        Regla de precio:
-        - Sales NO admin: unit_price debe ser exactamente igual a Product.sale_price
-        - Admin: permite override (para descuentos/precios especiales)
-        """
+        branch = attrs.get("branch") or getattr(self.instance, "branch", None)
+        items = attrs.get("items", None)
         user = self._get_request_user()
-        items = attrs.get("items", [])
 
-        # Si no hay items en el payload, no validamos acá.
-        if not items:
+        if branch is not None and not branch.is_active:
+            raise serializers.ValidationError({"branch": "La sucursal seleccionada no está activa."})
+
+        if items is None:
             return attrs
 
-        # Cargar productos del payload en bloque para evitar N+1
-        product_ids = [it["product"].id for it in items if it.get("product")]
-        products = {p.id: p for p in Product.objects.filter(id__in=product_ids)}
+        if not items:
+            raise serializers.ValidationError({"items": "La venta debe incluir al menos un item."})
 
+        seen_products = set()
         allow_override = self._can_override_price(user)
 
-        for it in items:
-            qty = it.get("qty")
-            unit_price = it.get("unit_price")
-            product = it.get("product")
+        for index, item in enumerate(items):
+            product = item.get("product")
+            qty = item.get("qty")
+            unit_price = item.get("unit_price")
+
+            if product is None:
+                raise serializers.ValidationError({"items": f"El item #{index + 1} requiere producto."})
+
+            if not product.is_active:
+                raise serializers.ValidationError(
+                    {"items": f"El producto '{product.sku} - {product.name}' está inactivo."}
+                )
+
+            if product.id in seen_products:
+                raise serializers.ValidationError({"items": "No se permiten productos repetidos en la misma venta."})
+            seen_products.add(product.id)
 
             if qty is None or qty <= 0:
-                raise serializers.ValidationError("Cada item debe tener qty > 0.")
+                raise serializers.ValidationError({"items": f"El item #{index + 1} debe tener qty > 0."})
+
             if unit_price is None or unit_price < 0:
-                raise serializers.ValidationError("Cada item debe tener unit_price >= 0.")
-            if product is None:
-                raise serializers.ValidationError("Cada item debe incluir product.")
+                raise serializers.ValidationError({"items": f"El item #{index + 1} debe tener unit_price >= 0."})
 
-            p = products.get(product.id)
-            if not p:
-                raise serializers.ValidationError("Producto inválido.")
-
-            # Validación estricta (igualdad exacta) para no admin.
-            # Si luego quieres tolerancia por redondeo, lo ajustamos.
-            if not allow_override and Decimal(str(unit_price)) != p.sale_price:
+            if not allow_override and Decimal(str(unit_price)) != product.sale_price:
                 raise serializers.ValidationError(
-                    f"Precio no permitido para '{p.sku} - {p.name}'. "
-                    f"Precio actual={unit_price} | Precio catálogo={p.sale_price}. "
-                    "Solo Admin puede modificar el precio."
+                    {
+                        "items": (
+                            f"Precio no permitido para '{product.sku} - {product.name}'. "
+                            f"Precio catálogo={product.sale_price}. Solo Admin puede modificar el precio."
+                        )
+                    }
                 )
 
         return attrs
 
-    def create(self, validated_data):
-        items_data = validated_data.pop("items", [])
-        cashier_id = self._get_cashier_id_from_request()
-
-        sale = Sale.objects.create(
-            cashier_id=cashier_id,
-            status=SaleStatus.DRAFT,
-            **validated_data
-        )
-
+    def _create_items(self, sale: Sale, items_data: list[dict]) -> None:
         for item in items_data:
             qty = item["qty"]
             unit_price = item["unit_price"]
-            subtotal = item.get("subtotal") or (qty * unit_price)
+            subtotal = self._money(qty * unit_price)
 
             SaleItem.objects.create(
                 sale=sale,
@@ -148,11 +163,21 @@ class SaleSerializer(serializers.ModelSerializer):
                 subtotal=subtotal,
             )
 
+    def create(self, validated_data):
+        items_data = validated_data.pop("items", [])
+        cashier_id = self._get_cashier_id_from_request()
+
+        sale = Sale.objects.create(
+            cashier_id=cashier_id,
+            status=SaleStatus.DRAFT,
+            **validated_data,
+        )
+        self._create_items(sale, items_data)
         return sale
 
     def update(self, instance, validated_data):
-        if instance.status in (SaleStatus.CONFIRMED, SaleStatus.VOID):
-            raise serializers.ValidationError("No se puede editar una venta CONFIRMED/VOID.")
+        if instance.status != SaleStatus.DRAFT:
+            raise serializers.ValidationError("Solo se puede editar una venta en estado DRAFT.")
 
         items_data = validated_data.pop("items", None)
 
@@ -161,25 +186,46 @@ class SaleSerializer(serializers.ModelSerializer):
         instance.save()
 
         if items_data is not None:
-            # Validación de precios nuevamente (porque update puede cambiar items)
-            self.validate({"items": items_data})
-
             instance.items.all().delete()
-            for item in items_data:
-                qty = item["qty"]
-                unit_price = item["unit_price"]
-                subtotal = item.get("subtotal") or (qty * unit_price)
-
-                SaleItem.objects.create(
-                    sale=instance,
-                    product=item["product"],
-                    qty=qty,
-                    unit_price=unit_price,
-                    subtotal=subtotal,
-                )
+            self._create_items(instance, items_data)
 
         return instance
 
 
 class SaleVoidSerializer(serializers.Serializer):
     reason = serializers.CharField(required=False, allow_blank=True, max_length=500)
+
+
+class SaleTicketSerializer(serializers.ModelSerializer):
+    branch_name = serializers.CharField(source="branch.name", read_only=True)
+    company_name = serializers.CharField(source="branch.company.name", read_only=True)
+    company_tax_id = serializers.CharField(source="branch.company.tax_id", read_only=True)
+    company_phone = serializers.CharField(source="branch.company.phone", read_only=True)
+    company_address = serializers.CharField(source="branch.company.address", read_only=True)
+    receipt_header = serializers.CharField(source="branch.company.receipt_header", read_only=True)
+    receipt_footer = serializers.CharField(source="branch.company.receipt_footer", read_only=True)
+    logo = serializers.CharField(source="branch.company.logo", read_only=True)
+    items = SaleItemSerializer(many=True, read_only=True)
+
+    class Meta:
+        model = Sale
+        fields = [
+            "id",
+            "status",
+            "payment_method",
+            "sold_at",
+            "voided_at",
+            "void_reason",
+            "subtotal",
+            "tax",
+            "total",
+            "branch_name",
+            "company_name",
+            "company_tax_id",
+            "company_phone",
+            "company_address",
+            "receipt_header",
+            "receipt_footer",
+            "logo",
+            "items",
+        ]
