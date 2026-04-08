@@ -1,0 +1,20 @@
+[tool.ruff]
+line-length = 100
+target-version = "py312"
+exclude = [
+  ".git",
+  ".venv",
+  "venv",
+  "node_modules",
+  "dist",
+  "build",
+  "__pycache__"
+]
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "B", "UP"]
+ignore = ["E501"]  # Ruff format ya maneja líneas; evitamos doble guerra.
+
+[tool.ruff.format]
+quote-style = "double"
+indent-style = "space"
