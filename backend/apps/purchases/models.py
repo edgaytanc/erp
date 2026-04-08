@@ -17,6 +17,7 @@ class Supplier(TimeStampedModel):
 
     class Meta:
         db_table = "purchases_supplier"
+        ordering = ["name"]
 
     def __str__(self) -> str:
         return self.name
@@ -41,8 +42,6 @@ class Purchase(TimeStampedModel):
     total_cost = models.DecimalField(
         max_digits=14, decimal_places=2, validators=[MinValueValidator(Decimal("0.00"))], default=Decimal("0.00")
     )
-
-    # ✅ NUEVO: cancelación de DRAFT
     cancelled_at = models.DateTimeField(null=True, blank=True, db_index=True)
     cancel_reason = models.TextField(blank=True, default="")
 
@@ -53,6 +52,7 @@ class Purchase(TimeStampedModel):
             models.Index(fields=["supplier", "purchased_at"], name="ix_purchase_supplier_dt"),
             models.Index(fields=["branch", "cancelled_at"], name="ix_purchase_branch_cancel_dt"),
         ]
+        ordering = ["-created_at"]
 
     def __str__(self) -> str:
         return f"Compra {self.id} - {self.status}"

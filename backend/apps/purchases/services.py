@@ -39,6 +39,12 @@ def confirm_purchase(purchase_id) -> Purchase:
     if purchase.status == PurchaseStatus.CANCELLED:
         raise PurchaseServiceError("No se puede confirmar una compra cancelada.")
 
+    if not purchase.branch.is_active:
+        raise PurchaseServiceError("No se puede confirmar una compra en una sucursal inactiva.")
+
+    if not purchase.supplier.is_active:
+        raise PurchaseServiceError("No se puede confirmar una compra con un proveedor inactivo.")
+
     items = list(purchase.items.all())
     if not items:
         raise PurchaseServiceError("No se puede confirmar una compra sin items.")
@@ -69,6 +75,10 @@ def confirm_purchase(purchase_id) -> Purchase:
             note=f"Compra confirmada. Factura: {purchase.invoice_number or '-'}",
             prevent_negative=True,
         )
+
+        if item.product.cost_price != item.unit_cost:
+            item.product.cost_price = item.unit_cost
+            item.product.save(update_fields=["cost_price", "updated_at"])
 
     purchase.total_cost = _money(total_cost)
     purchase.status = PurchaseStatus.CONFIRMED
