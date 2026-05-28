@@ -4,8 +4,8 @@ export function mapSalePayload({ branchId, paymentMethod, items }) {
     payment_method: paymentMethod,
     items: items.map((item) => ({
       product: item.productId,
-      qty: item.qty,
-      unit_price: item.unitPrice,
+      qty: Number(item.quantity || 0).toFixed(3),
+      unit_price: Number(item.unitPrice || 0).toFixed(2),
     })),
   };
 }

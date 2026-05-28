@@ -25,6 +25,11 @@ class InventoryAPITestCase(APITestCase):
             password="admin123",
             role="admin",
         )
+        self.sales_user = self.user_model.objects.create_user(
+            username="seller_inventory_read",
+            password="seller123",
+            role="sales",
+        )
         self.company = Company.objects.create(name="ERP Demo")
         self.branch = Branch.objects.create(company=self.company, name="Central")
         self.category = Category.objects.create(name="Abarrotes")
@@ -63,6 +68,33 @@ class InventoryAPITestCase(APITestCase):
         self.assertEqual(response.status_code, status.HTTP_200_OK)
         self.assertEqual(response.data["count"], 1)
         self.assertEqual(response.data["results"][0]["sku"], "FRIJOL-001")
+
+    def test_sales_role_can_read_inventory_for_pos(self):
+        self.client.force_authenticate(user=self.sales_user)
+
+        products_response = self.client.get(reverse("inventory-products-list"), {"q": "arroz"})
+        stocks_response = self.client.get(reverse("inventory-stocks-list"), {"branch": str(self.branch.id)})
+
+        self.assertEqual(products_response.status_code, status.HTTP_200_OK)
+        self.assertEqual(stocks_response.status_code, status.HTTP_200_OK)
+
+    def test_sales_role_cannot_write_inventory(self):
+        self.client.force_authenticate(user=self.sales_user)
+
+        response = self.client.post(
+            reverse("inventory-products-list"),
+            {
+                "category": str(self.category.id),
+                "sku": "VENTA-001",
+                "name": "Producto desde POS",
+                "sale_price": "1.00",
+                "cost_price": "1.00",
+                "min_stock": "1.00",
+            },
+            format="json",
+        )
+
+        self.assertEqual(response.status_code, status.HTTP_403_FORBIDDEN)
 
     def test_stock_list_can_filter_low_stock_per_branch(self):
         apply_inventory_movement(

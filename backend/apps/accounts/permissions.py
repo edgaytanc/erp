@@ -24,7 +24,7 @@ class ModuleRolePermission(BasePermission):
     Política por módulo:
     - Admin: todo
     - Purchases: compras completo + inventario SOLO lectura
-    - Sales: ventas completo
+    - Sales: ventas completo + inventario SOLO lectura para POS
     Para usarlo, en cada ViewSet define: module_name = "inventory"|"purchases"|"sales"
     """
 
@@ -39,7 +39,10 @@ class ModuleRolePermission(BasePermission):
         module = getattr(view, "module_name", "")
 
         if module == "inventory":
-            return getattr(user, "is_purchases", lambda: False)() and request.method in SAFE_METHODS
+            can_read_inventory = getattr(user, "is_purchases", lambda: False)() or getattr(
+                user, "is_sales", lambda: False
+            )()
+            return can_read_inventory and request.method in SAFE_METHODS
 
         if module == "purchases":
             return getattr(user, "is_purchases", lambda: False)()

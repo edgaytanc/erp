@@ -81,9 +81,20 @@ class PurchaseSerializer(serializers.ModelSerializer):
         branch = attrs.get("branch") or getattr(self.instance, "branch", None)
         supplier = attrs.get("supplier") or getattr(self.instance, "supplier", None)
         items = attrs.get("items", None)
+        request = self.context.get("request")
+        user = getattr(request, "user", None)
 
         if branch is not None and not branch.is_active:
             raise serializers.ValidationError({"branch": "La sucursal seleccionada no está activa."})
+
+        assigned_branch_id = getattr(user, "branch_id", None)
+        is_admin = bool(user and getattr(user, "is_admin", lambda: False)())
+
+        if assigned_branch_id and branch is not None and branch.id != assigned_branch_id:
+            raise serializers.ValidationError({"branch": "Solo puedes operar la sucursal asignada a tu usuario."})
+
+        if user and not is_admin and not assigned_branch_id:
+            raise serializers.ValidationError({"branch": "Tu usuario no tiene una sucursal asignada."})
 
         if supplier is not None and not supplier.is_active:
             raise serializers.ValidationError({"supplier": "El proveedor seleccionado no está activo."})

@@ -31,6 +31,9 @@ class PurchasesApiIntegrationTestCase(APITestCase):
 
         self.company = Company.objects.create(name="ERP Demo")
         self.branch = Branch.objects.create(company=self.company, name="Central", is_active=True)
+        self.other_branch = Branch.objects.create(company=self.company, name="Norte", is_active=True)
+        self.purchases_user.branch = self.branch
+        self.purchases_user.save(update_fields=["branch"])
         self.category = Category.objects.create(name="Abarrotes")
         self.product = Product.objects.create(
             category=self.category,
@@ -145,6 +148,16 @@ class PurchasesApiIntegrationTestCase(APITestCase):
 
         movements = StockMovement.objects.filter(reference_type=ReferenceType.PURCHASE, reference_id=str(purchase_id))
         self.assertEqual(movements.count(), 2)
+
+    def test_purchases_user_cannot_create_purchase_in_another_branch(self):
+        self.authenticate_purchases()
+        payload = self.purchase_payload()
+        payload["branch"] = str(self.other_branch.id)
+
+        response = self.client.post(reverse("purchases-list"), payload, format="json")
+
+        self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
+        self.assertIn("sucursal asignada", str(response.data).lower())
 
     def test_confirm_purchase_is_idempotent_and_does_not_duplicate_stock(self):
         self.authenticate_purchases()

@@ -51,6 +51,9 @@ class SalesApiIntegrationTestCase(APITestCase):
         )
 
         self.branch = Branch.objects.create(company=self.company, name="Central", is_active=True)
+        self.other_branch = Branch.objects.create(company=self.company, name="Norte", is_active=True)
+        self.sales_user.branch = self.branch
+        self.sales_user.save(update_fields=["branch"])
         self.category = Category.objects.create(name="Abarrotes")
         self.product = Product.objects.create(
             category=self.category,
@@ -129,6 +132,16 @@ class SalesApiIntegrationTestCase(APITestCase):
         self.assertEqual(response.data["total"], "68.00")
         self.assertEqual(len(response.data["items"]), 2)
         self.assertEqual(response.data["cashier_id"], str(self.sales_user.id))
+
+    def test_sales_user_cannot_create_sale_in_another_branch(self):
+        self.authenticate_sales()
+        payload = self.sale_payload()
+        payload["branch"] = str(self.other_branch.id)
+
+        response = self.client.post(reverse("sales-list"), payload, format="json")
+
+        self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
+        self.assertIn("sucursal asignada", str(response.data).lower())
 
     def test_quick_create_sale_works(self):
         self.authenticate_sales()
