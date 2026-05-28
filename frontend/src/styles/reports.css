@@ -1,0 +1,249 @@
+.reports-page {
+  display: grid;
+  gap: 1rem;
+}
+
+.reports-toolbar,
+.reports-filters,
+.reports-panel,
+.reports-summary article {
+  border: 1px solid #dfe8f4;
+  border-radius: 0.5rem;
+  background: #ffffff;
+  box-shadow: 0 8px 20px rgba(15, 23, 42, 0.05);
+}
+
+.reports-toolbar {
+  display: flex;
+  justify-content: space-between;
+  align-items: end;
+  gap: 1rem;
+  padding: 1rem;
+}
+
+.reports-toolbar h2,
+.reports-panel__header h3 {
+  margin: 0;
+}
+
+.reports-toolbar p {
+  margin: 0.25rem 0 0;
+  color: #607089;
+}
+
+.reports-tabs {
+  display: flex;
+  gap: 0.5rem;
+}
+
+.reports-tab {
+  min-height: 2.8rem;
+  border: 1px solid #cbd5e1;
+  border-radius: 0.5rem;
+  background: #ffffff;
+  cursor: pointer;
+  font-weight: 700;
+  padding: 0 1rem;
+}
+
+.reports-tab--active {
+  border-color: #2563eb;
+  background: #eff6ff;
+  color: #1d4ed8;
+}
+
+.reports-filters {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr)) auto auto;
+  gap: 0.75rem;
+  align-items: end;
+  padding: 1rem;
+}
+
+.reports-filters label {
+  display: grid;
+  gap: 0.4rem;
+}
+
+.reports-filters span {
+  font-weight: 700;
+}
+
+.reports-filters input,
+.reports-filters select {
+  width: 100%;
+  border: 1px solid #cbd5e1;
+  border-radius: 0.5rem;
+  padding: 0.75rem;
+  outline: none;
+}
+
+.reports-filters .btn {
+  border-radius: 0.5rem;
+}
+
+.reports-alert {
+  padding: 0.85rem 1rem;
+  border: 1px solid #fecaca;
+  border-radius: 0.5rem;
+  background: #fef2f2;
+  color: #991b1b;
+  font-weight: 700;
+}
+
+.reports-summary {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 1rem;
+}
+
+.reports-summary article {
+  display: grid;
+  gap: 0.35rem;
+  padding: 1rem;
+}
+
+.reports-summary span {
+  color: #64748b;
+}
+
+.reports-summary strong {
+  font-size: 1.45rem;
+}
+
+.reports-grid {
+  display: grid;
+  grid-template-columns: 360px minmax(0, 1fr);
+  gap: 1rem;
+  align-items: start;
+}
+
+.reports-panel__header {
+  display: flex;
+  justify-content: space-between;
+  gap: 1rem;
+  padding: 1rem;
+  border-bottom: 1px solid #edf2f7;
+}
+
+.reports-panel__header span {
+  color: #64748b;
+}
+
+.reports-table,
+.reports-detail {
+  display: grid;
+  padding: 1rem;
+}
+
+.reports-table-row,
+.reports-detail-row {
+  display: grid;
+  gap: 0.75rem;
+  align-items: center;
+  padding: 0.75rem 0;
+  border-top: 1px solid #edf2f7;
+}
+
+.reports-table-row:first-child,
+.reports-detail-row:first-child {
+  border-top: none;
+}
+
+.reports-table-row {
+  grid-template-columns: minmax(120px, 1fr) auto auto;
+}
+
+.reports-detail-row--sales,
+.reports-detail-row--purchases {
+  grid-template-columns: minmax(180px, 1fr) 160px 130px;
+}
+
+.reports-detail-row--inventory {
+  grid-template-columns: minmax(220px, 1fr) 140px 110px 130px;
+}
+
+.reports-detail-row div {
+  display: grid;
+  gap: 0.15rem;
+}
+
+.reports-table-row span,
+.reports-detail-row span {
+  color: #64748b;
+}
+
+.reports-empty {
+  display: grid;
+  place-items: center;
+  min-height: 8rem;
+  color: #64748b;
+}
+
+@media (max-width: 1120px) {
+  .reports-grid,
+  .reports-summary {
+    grid-template-columns: 1fr 1fr;
+  }
+}
+
+@media (max-width: 760px) {
+  .reports-toolbar,
+  .reports-filters,
+  .reports-grid,
+  .reports-summary,
+  .reports-table-row,
+  .reports-detail-row--sales,
+  .reports-detail-row--purchases,
+  .reports-detail-row--inventory {
+    grid-template-columns: 1fr;
+  }
+
+  .reports-toolbar {
+    flex-direction: column;
+    align-items: stretch;
+  }
+}
+
+@media print {
+  body {
+    background: #ffffff;
+  }
+
+  .sidebar,
+  .app-header,
+  .card,
+  .reports-toolbar,
+  .reports-filters,
+  .reports-alert {
+    display: none;
+  }
+
+  .app-shell {
+    display: block;
+  }
+
+  .app-main {
+    padding: 0;
+  }
+
+  .reports-page {
+    display: block;
+  }
+
+  .reports-summary,
+  .reports-grid {
+    grid-template-columns: 1fr;
+    gap: 0.5rem;
+  }
+
+  .reports-summary article,
+  .reports-panel {
+    break-inside: avoid;
+    box-shadow: none;
+  }
+
+  .reports-panel {
+    margin-top: 0.75rem;
+  }
+}

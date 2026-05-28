@@ -38,6 +38,7 @@ INSTALLED_APPS = [
     "apps.sales",
     "apps.purchases",
     "apps.config_module",
+    "apps.reports",
 
 ]
 

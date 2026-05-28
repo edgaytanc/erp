@@ -25,12 +25,23 @@ class PurchaseViewSet(viewsets.ModelViewSet):
     serializer_class = PurchaseSerializer
 
     def get_queryset(self):
-        return (
+        qs = (
             Purchase.objects.select_related("branch", "supplier")
             .prefetch_related("items__product")
             .all()
             .order_by("-created_at")
         )
+        user = self.request.user
+        branch_id = self.request.query_params.get("branch")
+
+        if getattr(user, "branch_id", None):
+            qs = qs.filter(branch_id=user.branch_id)
+        elif not getattr(user, "is_admin", lambda: False)():
+            qs = qs.none()
+        elif branch_id:
+            qs = qs.filter(branch_id=branch_id)
+
+        return qs
 
     def _ensure_draft(self, purchase: Purchase, action_name: str):
         if purchase.status != PurchaseStatus.DRAFT:
@@ -70,7 +81,8 @@ class PurchaseViewSet(viewsets.ModelViewSet):
         POST /api/purchases/{id}/confirm/
         """
         try:
-            purchase = confirm_purchase(pk)
+            purchase = self.get_object()
+            purchase = confirm_purchase(purchase.pk)
             return Response(PurchaseSerializer(purchase, context={"request": request}).data, status=status.HTTP_200_OK)
 
         except BusinessRuleError as e:
@@ -90,7 +102,8 @@ class PurchaseViewSet(viewsets.ModelViewSet):
         reason = serializer.validated_data.get("reason", "")
 
         try:
-            purchase = cancel_purchase(pk, reason=reason)
+            purchase = self.get_object()
+            purchase = cancel_purchase(purchase.pk, reason=reason)
             return Response(PurchaseSerializer(purchase, context={"request": request}).data, status=status.HTTP_200_OK)
 
         except BusinessRuleError as e:

@@ -1,6 +1,8 @@
 from django.contrib.auth.models import AbstractUser
 from django.db import models
 
+from apps.core.models import Branch
+
 
 class User(AbstractUser):
     class Roles(models.TextChoices):
@@ -13,6 +15,13 @@ class User(AbstractUser):
         choices=Roles.choices,
         default=Roles.SALES,
         db_index=True,
+    )
+    branch = models.ForeignKey(
+        Branch,
+        on_delete=models.SET_NULL,
+        related_name="users",
+        null=True,
+        blank=True,
     )
 
     def is_admin(self) -> bool:

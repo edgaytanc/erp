@@ -1,0 +1,250 @@
+.purchases-page {
+  display: grid;
+  gap: 1rem;
+}
+
+.purchases-toolbar,
+.purchases-panel {
+  border: 1px solid #dfe8f4;
+  border-radius: 0.5rem;
+  background: #ffffff;
+  box-shadow: 0 8px 20px rgba(15, 23, 42, 0.05);
+}
+
+.purchases-toolbar {
+  display: flex;
+  justify-content: space-between;
+  align-items: end;
+  gap: 1rem;
+  padding: 1rem;
+}
+
+.purchases-toolbar h2,
+.purchases-panel__header h3 {
+  margin: 0;
+}
+
+.purchases-toolbar p {
+  margin: 0.25rem 0 0;
+  color: #607089;
+}
+
+.purchases-grid {
+  display: grid;
+  grid-template-columns: 360px minmax(0, 1fr);
+  gap: 1rem;
+  align-items: start;
+}
+
+.purchases-panel--entry {
+  grid-row: span 2;
+}
+
+.purchases-panel__header {
+  display: flex;
+  justify-content: space-between;
+  gap: 1rem;
+  padding: 1rem;
+  border-bottom: 1px solid #edf2f7;
+}
+
+.purchases-panel__header span {
+  color: #64748b;
+}
+
+.purchases-alert {
+  padding: 0.85rem 1rem;
+  border-radius: 0.5rem;
+  font-weight: 700;
+}
+
+.purchases-alert--error {
+  border: 1px solid #fecaca;
+  background: #fef2f2;
+  color: #991b1b;
+}
+
+.purchases-alert--success {
+  border: 1px solid #bbf7d0;
+  background: #f0fdf4;
+  color: #166534;
+}
+
+.purchases-branch,
+.supplier-form,
+.purchase-form,
+.purchase-item-picker,
+.purchase-item-form label,
+.supplier-form label,
+.purchase-form label {
+  display: grid;
+  gap: 0.4rem;
+}
+
+.purchases-branch span,
+.supplier-form span,
+.purchase-form span,
+.purchase-item-form span {
+  font-weight: 700;
+}
+
+.purchases-branch small {
+  color: #64748b;
+  overflow-wrap: anywhere;
+}
+
+.purchases-branch input,
+.supplier-form input,
+.purchase-form input,
+.purchase-form select,
+.purchase-item-form select,
+.purchase-item-form input {
+  width: 100%;
+  border: 1px solid #cbd5e1;
+  border-radius: 0.5rem;
+  padding: 0.75rem;
+  outline: none;
+}
+
+.purchases-branch input:focus,
+.supplier-form input:focus,
+.purchase-form input:focus,
+.purchase-form select:focus,
+.purchase-item-form select:focus,
+.purchase-item-form input:focus {
+  border-color: #2563eb;
+  box-shadow: 0 0 0 3px rgba(37, 99, 235, 0.12);
+}
+
+.supplier-form,
+.purchase-form,
+.recent-purchases {
+  padding: 1rem;
+}
+
+.supplier-form,
+.purchase-form {
+  gap: 0.85rem;
+}
+
+.purchases-form-row,
+.purchase-item-form {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 0.75rem;
+}
+
+.purchase-item-form {
+  grid-template-columns: minmax(180px, 1fr) 120px 120px auto;
+  align-items: end;
+}
+
+.purchase-item-form .btn,
+.supplier-form .btn,
+.purchase-actions .btn {
+  border-radius: 0.5rem;
+}
+
+.purchase-items {
+  display: grid;
+  border: 1px solid #edf2f7;
+  border-radius: 0.5rem;
+  overflow: hidden;
+}
+
+.purchase-item-row {
+  display: grid;
+  grid-template-columns: minmax(180px, 1fr) 90px 110px 110px 78px;
+  gap: 0.75rem;
+  align-items: center;
+  padding: 0.75rem;
+  border-top: 1px solid #edf2f7;
+}
+
+.purchase-item-row:first-child {
+  border-top: none;
+}
+
+.purchase-item-row div {
+  display: grid;
+  gap: 0.15rem;
+}
+
+.purchase-item-row span,
+.recent-purchase-row span {
+  color: #64748b;
+}
+
+.purchase-item-row button {
+  min-height: 2.2rem;
+  border: 1px solid #cbd5e1;
+  border-radius: 0.5rem;
+  background: #f8fafc;
+  cursor: pointer;
+}
+
+.purchase-summary {
+  display: flex;
+  justify-content: space-between;
+  gap: 1rem;
+  padding: 1rem;
+  border-radius: 0.5rem;
+  background: #f8fafc;
+  font-size: 1.2rem;
+}
+
+.purchase-actions {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 0.75rem;
+}
+
+.purchase-empty {
+  display: grid;
+  place-items: center;
+  min-height: 8rem;
+  padding: 1rem;
+  color: #64748b;
+}
+
+.recent-purchases {
+  display: grid;
+}
+
+.recent-purchase-row {
+  display: flex;
+  justify-content: space-between;
+  gap: 1rem;
+  align-items: center;
+  padding: 0.75rem 0;
+  border-top: 1px solid #edf2f7;
+}
+
+.recent-purchase-row:first-child {
+  border-top: none;
+}
+
+.recent-purchase-row div {
+  display: grid;
+  gap: 0.15rem;
+}
+
+@media (max-width: 1180px) {
+  .purchases-grid {
+    grid-template-columns: 1fr;
+  }
+}
+
+@media (max-width: 780px) {
+  .purchases-toolbar,
+  .purchases-form-row,
+  .purchase-item-form,
+  .purchase-item-row,
+  .purchase-actions {
+    grid-template-columns: 1fr;
+  }
+
+  .purchases-toolbar {
+    align-items: stretch;
+  }
+}

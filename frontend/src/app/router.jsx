@@ -11,6 +11,7 @@ import { InventoryPage } from "../features/inventory/pages/InventoryPage";
 import { PurchasesPage } from "../features/purchases/pages/PurchasesPage";
 import { PosPage } from "../features/pos/pages/PosPage";
 import { ReportsPage } from "../features/reports/pages/ReportsPage";
+import { AdminConfigPage } from "../features/admin/pages/AdminConfigPage";
 import { NotFoundPage } from "../features/system/pages/NotFoundPage";
 import { ForbiddenPage } from "../features/system/pages/ForbiddenPage";
 
@@ -50,6 +51,14 @@ export const router = createBrowserRouter([
             element: (
               <RoleRoute allowedRoles={["admin"]}>
                 <ReportsPage />
+              </RoleRoute>
+            ),
+          },
+          {
+            path: "admin/config",
+            element: (
+              <RoleRoute allowedRoles={["admin"]}>
+                <AdminConfigPage />
               </RoleRoute>
             ),
           },

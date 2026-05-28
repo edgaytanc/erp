@@ -9,6 +9,7 @@ const NAV_ITEMS = [
   { to: "/purchases", label: "Compras", roles: [APP_ROLES.ADMIN, APP_ROLES.PURCHASES] },
   { to: "/pos", label: "Ventas POS", roles: [APP_ROLES.ADMIN, APP_ROLES.SALES] },
   { to: "/reports", label: "Reportes", roles: [APP_ROLES.ADMIN] },
+  { to: "/admin/config", label: "Configuracion", roles: [APP_ROLES.ADMIN] },
 ];
 
 export function AppSidebar() {

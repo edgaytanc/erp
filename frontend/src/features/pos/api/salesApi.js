@@ -4,3 +4,23 @@ export async function listSales(params = {}) {
   const response = await api.get("/sales/", { params });
   return response.data;
 }
+
+export async function createSale(payload) {
+  const response = await api.post("/sales/", payload);
+  return response.data;
+}
+
+export async function updateSale(saleId, payload) {
+  const response = await api.patch(`/sales/${saleId}/`, payload);
+  return response.data;
+}
+
+export async function confirmSale(saleId) {
+  const response = await api.post(`/sales/${saleId}/confirm/`, {});
+  return response.data;
+}
+
+export async function voidSale(saleId, payload = {}) {
+  const response = await api.post(`/sales/${saleId}/void/`, payload);
+  return response.data;
+}

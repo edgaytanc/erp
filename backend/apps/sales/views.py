@@ -18,12 +18,20 @@ class SaleViewSet(viewsets.ModelViewSet):
     serializer_class = SaleSerializer
 
     def get_queryset(self):
-        return (
+        qs = (
             Sale.objects.select_related("branch", "branch__company")
             .prefetch_related("items__product")
             .all()
             .order_by("-created_at")
         )
+        user = self.request.user
+
+        if getattr(user, "branch_id", None):
+            qs = qs.filter(branch_id=user.branch_id)
+        elif not getattr(user, "is_admin", lambda: False)():
+            qs = qs.none()
+
+        return qs
 
     def get_serializer_class(self):
         if self.action == "ticket":
@@ -87,7 +95,8 @@ class SaleViewSet(viewsets.ModelViewSet):
     @action(detail=True, methods=["post"], url_path="confirm")
     def confirm(self, request, pk=None):
         try:
-            sale = confirm_sale(pk, cashier_id=request.user.id)
+            sale = self.get_object()
+            sale = confirm_sale(sale.pk, cashier_id=request.user.id)
             sale.refresh_from_db()
             return Response(
                 SaleSerializer(sale, context={"request": request}).data,
@@ -107,7 +116,8 @@ class SaleViewSet(viewsets.ModelViewSet):
         reason = serializer.validated_data.get("reason", "")
 
         try:
-            sale = void_sale(pk, user=request.user, cashier_id=request.user.id, reason=reason)
+            sale = self.get_object()
+            sale = void_sale(sale.pk, user=request.user, cashier_id=request.user.id, reason=reason)
             sale.refresh_from_db()
             return Response(
                 SaleSerializer(sale, context={"request": request}).data,
