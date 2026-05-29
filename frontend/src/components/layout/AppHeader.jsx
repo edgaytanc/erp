@@ -28,7 +28,7 @@ export function AppHeader() {
     <header className="app-header">
       <div>
         <h1 className="app-header__title">ERP Web</h1>
-        <p className="app-header__subtitle">Operación modular y segura con JWT</p>
+        <p className="app-header__subtitle">Sistema de gestión de empresas</p>
       </div>
 
       <div className="app-header__meta">
