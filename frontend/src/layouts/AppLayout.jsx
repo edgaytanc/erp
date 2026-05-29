@@ -11,7 +11,7 @@ export function AppLayout() {
       <div className="app-shell__content">
         <AppHeader />
         <main className="app-main">
-          <PosEntryCard />
+          {/* <PosEntryCard /> */}
           <Outlet />
         </main>
       </div>
