@@ -1,10 +1,17 @@
 from rest_framework import viewsets
-from rest_framework.permissions import IsAuthenticated
+from rest_framework.permissions import AllowAny, IsAuthenticated
+from rest_framework.response import Response
+from rest_framework.views import APIView
 
 from apps.accounts.permissions import IsAdminRole
 from apps.core.models import Branch, Company
 from .models import CompanySettings
-from .serializers import BranchSerializer, CompanySerializer, CompanySettingsSerializer
+from .serializers import (
+    BranchSerializer,
+    CompanySerializer,
+    CompanySettingsSerializer,
+    PublicCompanyBrandingSerializer,
+)
 
 
 class AdminConfigPermissionMixin:
@@ -14,6 +21,18 @@ class AdminConfigPermissionMixin:
 class CompanyViewSet(AdminConfigPermissionMixin, viewsets.ModelViewSet):
     queryset = Company.objects.all().order_by("name")
     serializer_class = CompanySerializer
+
+
+class PublicCompanyBrandingView(APIView):
+    permission_classes = [AllowAny]
+
+    def get(self, request):
+        company = Company.objects.order_by("created_at", "name").first()
+
+        if not company:
+            return Response({"name": "ERP", "logo": ""})
+
+        return Response(PublicCompanyBrandingSerializer(company).data)
 
 
 class BranchViewSet(AdminConfigPermissionMixin, viewsets.ModelViewSet):

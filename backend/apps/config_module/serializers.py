@@ -22,6 +22,12 @@ class CompanySerializer(serializers.ModelSerializer):
         read_only_fields = ["id", "created_at", "updated_at"]
 
 
+class PublicCompanyBrandingSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = Company
+        fields = ["name", "logo"]
+
+
 class BranchSerializer(serializers.ModelSerializer):
     company_name = serializers.CharField(source="company.name", read_only=True)
 

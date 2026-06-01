@@ -33,6 +33,20 @@ class AdminConfigApiTestCase(APITestCase):
         response = self.client.get(reverse("config-companies-list"))
         self.assertEqual(response.status_code, status.HTTP_403_FORBIDDEN)
 
+    def test_public_branding_exposes_company_name_and_logo_without_auth(self):
+        Company.objects.create(name="ERP Demo", logo="https://example.test/logo.png")
+
+        response = self.client.get(reverse("config-public-branding"))
+
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.assertEqual(
+            response.data,
+            {
+                "name": "ERP Demo",
+                "logo": "https://example.test/logo.png",
+            },
+        )
+
     def test_admin_can_manage_company_branch_and_settings(self):
         self.authenticate_admin()
 

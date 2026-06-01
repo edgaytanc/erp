@@ -23,6 +23,68 @@ function monthStartIsoDate() {
   return new Date(date.getFullYear(), date.getMonth(), 1).toISOString().slice(0, 10);
 }
 
+function escapeHtml(value) {
+  return String(value ?? "")
+    .replaceAll("&", "&amp;")
+    .replaceAll("<", "&lt;")
+    .replaceAll(">", "&gt;")
+    .replaceAll('"', "&quot;")
+    .replaceAll("'", "&#039;");
+}
+
+function reportLabel(reportType) {
+  if (reportType === "sales") {
+    return "Reporte de Ventas";
+  }
+  if (reportType === "purchases") {
+    return "Reporte de Compras";
+  }
+  return "Reporte de Inventario";
+}
+
+function buildPrintableRows(reportType, items) {
+  if (reportType === "sales") {
+    return {
+      headers: ["Fecha", "Sucursal", "Metodo de pago", "Subtotal", "IVA", "Total"],
+      rows: items.map((sale) => [
+        sale.sold_at ? new Date(sale.sold_at).toLocaleString("es-GT") : "Sin fecha",
+        sale.branch_name,
+        sale.payment_method,
+        formatMoney(sale.subtotal),
+        formatMoney(sale.tax),
+        formatMoney(sale.total),
+      ]),
+    };
+  }
+
+  if (reportType === "purchases") {
+    return {
+      headers: ["Fecha", "Sucursal", "Proveedor", "Factura", "Total"],
+      rows: items.map((purchase) => [
+        purchase.purchased_at ? new Date(purchase.purchased_at).toLocaleString("es-GT") : "Sin fecha",
+        purchase.branch_name,
+        purchase.supplier_name,
+        purchase.invoice_number || "-",
+        formatMoney(purchase.total_cost),
+      ]),
+    };
+  }
+
+  return {
+    headers: ["Sucursal", "SKU", "Producto", "Categoria", "Stock", "Costo", "Precio venta", "Valor"],
+    rows: items.map((item) => [
+      item.branch_name,
+      item.sku,
+      item.name,
+      item.category_name || "-",
+      Number(item.qty_on_hand || 0).toFixed(2),
+      formatMoney(item.unit_cost),
+      formatMoney(item.sale_price),
+      formatMoney(item.inventory_value),
+    ]),
+  };
+}
+
 export function ReportsPage() {
   const [activeReport, setActiveReport] = useState("sales");
   const [dateFrom, setDateFrom] = useState(monthStartIsoDate);
@@ -80,7 +142,156 @@ export function ReportsPage() {
   }
 
   function handleGeneratePdf() {
-    window.print();
+    if (!activeData) {
+      return;
+    }
+
+    const printable = window.open("about:blank", "_blank");
+
+    if (!printable) {
+      setError("No se pudo abrir la pestaña del reporte. Revisa si el navegador bloqueo ventanas emergentes.");
+      return;
+    }
+
+    const reportTitle = reportLabel(activeReport);
+    const selectedBranch = branchId ? branches.find((branch) => branch.id === branchId)?.name : "Todas";
+    const detail = buildPrintableRows(activeReport, activeData.items || []);
+    const filters =
+      activeReport === "inventory"
+        ? `Sucursal: ${selectedBranch || "Todas"}`
+        : `Desde: ${dateFrom || "Inicio"} · Hasta: ${dateTo || "Hoy"} · Sucursal: ${selectedBranch || "Todas"}`;
+    const rowsHtml =
+      detail.rows.length > 0
+        ? detail.rows
+            .map((row) => `<tr>${row.map((cell) => `<td>${escapeHtml(cell)}</td>`).join("")}</tr>`)
+            .join("")
+        : `<tr><td colspan="${detail.headers.length}">Sin datos para los filtros seleccionados.</td></tr>`;
+
+    printable.document.write(`
+      <!doctype html>
+      <html lang="es">
+        <head>
+          <meta charset="utf-8" />
+          <title>${escapeHtml(reportTitle)} ${escapeHtml(dateFrom)} ${escapeHtml(dateTo)}</title>
+          <style>
+            body {
+              font-family: Inter, Arial, sans-serif;
+              color: #142033;
+              margin: 0;
+              padding: 24px;
+              background: #f8fafc;
+            }
+            .print-shell {
+              max-width: 1120px;
+              margin: 0 auto;
+              background: #ffffff;
+              border: 1px solid #dfe8f4;
+              border-radius: 8px;
+              overflow: hidden;
+            }
+            header {
+              display: flex;
+              justify-content: space-between;
+              gap: 16px;
+              padding: 20px;
+              border-bottom: 1px solid #edf2f7;
+            }
+            h1 {
+              margin: 0;
+              font-size: 24px;
+            }
+            p {
+              margin: 6px 0 0;
+              color: #526176;
+            }
+            .print-actions {
+              display: flex;
+              align-items: start;
+              gap: 8px;
+            }
+            button {
+              border: 0;
+              border-radius: 8px;
+              padding: 12px 16px;
+              background: #2563eb;
+              color: #ffffff;
+              font-weight: 700;
+              cursor: pointer;
+            }
+            main {
+              padding: 20px;
+            }
+            table {
+              width: 100%;
+              border-collapse: collapse;
+              font-size: 13px;
+            }
+            th, td {
+              border-bottom: 1px solid #e5edf7;
+              padding: 10px;
+              text-align: left;
+              vertical-align: top;
+            }
+            th {
+              background: #f1f5f9;
+              font-weight: 800;
+            }
+            td:last-child,
+            th:last-child {
+              text-align: right;
+            }
+            .meta {
+              display: grid;
+              gap: 4px;
+            }
+            @media print {
+              body {
+                padding: 0;
+                background: #ffffff;
+              }
+              .print-shell {
+                max-width: none;
+                border: 0;
+                border-radius: 0;
+              }
+              .print-actions {
+                display: none;
+              }
+              table {
+                font-size: 11px;
+              }
+              th, td {
+                padding: 7px;
+              }
+            }
+          </style>
+        </head>
+        <body>
+          <section class="print-shell">
+            <header>
+              <div class="meta">
+                <h1>${escapeHtml(reportTitle)}</h1>
+                <p>${escapeHtml(filters)}</p>
+                <p>Generado: ${escapeHtml(new Date().toLocaleString("es-GT"))}</p>
+              </div>
+              <div class="print-actions">
+                <button onclick="window.print()">Imprimir / guardar PDF</button>
+              </div>
+            </header>
+            <main>
+              <table>
+                <thead>
+                  <tr>${detail.headers.map((header) => `<th>${escapeHtml(header)}</th>`).join("")}</tr>
+                </thead>
+                <tbody>${rowsHtml}</tbody>
+              </table>
+            </main>
+          </section>
+        </body>
+      </html>
+    `);
+    printable.document.close();
+    printable.focus();
   }
 
   return (
@@ -149,7 +360,7 @@ export function ReportsPage() {
           Aplicar
         </Button>
         <Button disabled={isLoading || !activeData} onClick={handleGeneratePdf} type="button" variant="secondary">
-          Generar PDF
+          Generar version PDF
         </Button>
       </form>
 
