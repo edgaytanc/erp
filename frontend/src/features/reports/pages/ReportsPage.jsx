@@ -2,8 +2,9 @@ import { useEffect, useMemo, useState } from "react";
 
 import { Button } from "../../../components/common/Button";
 import { extractApiErrorMessage } from "../../../lib/apiError";
-import { listBranches } from "../../admin/api/adminConfigApi";
+import { listBranches, listUsers } from "../../admin/api/adminConfigApi";
 import {
+  getCashRegisterReport,
   getCriticalStockReport,
   getInventoryByBranchReport,
   getInventoryMovementsReport,
@@ -57,6 +58,30 @@ const REPORT_GROUPS = [
           ["Ventas", "sales_count", "number"],
           ["Unidades", "units_sold", "number"],
           ["Total", "total", "money"],
+        ],
+      },
+      {
+        id: "cash-register",
+        label: "Movimientos de caja",
+        fetcher: getCashRegisterReport,
+        usesCashiers: true,
+        usesDates: true,
+        summary: [
+          ["Cajas", "sessions_count", "number"],
+          ["Abiertas", "open_count", "number"],
+          ["Cerradas", "closed_count", "number"],
+          ["Diferencia", "difference", "money"],
+        ],
+        columns: [
+          ["Fecha", "movement_at", "date"],
+          ["Movimiento", "movement_type"],
+          ["Sucursal", "branch_name"],
+          ["Cajero", "cashier_name"],
+          ["Monto", "amount", "money"],
+          ["Ventas efectivo", "cash_sales_total", "money"],
+          ["Efectivo esperado", "expected_cash", "money"],
+          ["Diferencia", "difference", "money"],
+          ["Estado", "status"],
         ],
       },
     ],
@@ -249,6 +274,7 @@ function valueFor(row, key, type) {
   if (type === "number") return formatNumber(value);
   if (type === "date") return value ? new Date(value).toLocaleString("es-GT") : "Sin fecha";
   if (key === "type") return value === "IN" ? "Entrada" : value === "OUT" ? "Salida" : value || "-";
+  if (key === "status") return value === "OPEN" ? "Abierta" : value === "CLOSED" ? "Cerrada" : value || "-";
   return value ?? "-";
 }
 
@@ -392,7 +418,9 @@ export function ReportsPage() {
   const [dateFrom, setDateFrom] = useState(monthStartIsoDate);
   const [dateTo, setDateTo] = useState(todayIsoDate);
   const [branchId, setBranchId] = useState("");
+  const [cashierId, setCashierId] = useState("");
   const [branches, setBranches] = useState([]);
+  const [users, setUsers] = useState([]);
   const [reportData, setReportData] = useState(null);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState(null);
@@ -418,6 +446,9 @@ export function ReportsPage() {
         params.date_from = dateFrom;
         params.date_to = dateTo;
       }
+      if (activeReport.usesCashiers) {
+        params.cashier = cashierId || undefined;
+      }
 
       const [branchesResponse, reportResponse] = await Promise.all([
         branches.length ? Promise.resolve(branches) : listBranches({ is_active: true }),
@@ -425,6 +456,9 @@ export function ReportsPage() {
       ]);
 
       setBranches(unwrapResults(branchesResponse));
+      if (activeReport.usesCashiers && !users.length) {
+        setUsers(unwrapResults(await listUsers()));
+      }
       setReportData(reportResponse);
     } catch (requestError) {
       setError(extractApiErrorMessage(requestError, "No se pudo cargar el reporte."));
@@ -546,6 +580,23 @@ export function ReportsPage() {
             ))}
           </select>
         </label>
+        {activeReport.usesCashiers ? (
+          <label>
+            <span>Cajero</span>
+            <select onChange={(event) => setCashierId(event.target.value)} value={cashierId}>
+              <option value="">Todos los cajeros</option>
+              {users
+                .filter((user) => user.role === "sales" || user.role === "admin")
+                .map((user) => (
+                  <option key={user.id} value={user.id}>
+                    {user.first_name || user.last_name
+                      ? `${user.first_name} ${user.last_name}`.trim()
+                      : user.username}
+                  </option>
+                ))}
+            </select>
+          </label>
+        ) : null}
         <Button disabled={isLoading} type="submit">
           Aplicar
         </Button>

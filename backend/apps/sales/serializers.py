@@ -4,7 +4,61 @@ from decimal import Decimal, ROUND_HALF_UP
 
 from rest_framework import serializers
 
-from .models import Sale, SaleItem, SaleStatus
+from .models import CashRegisterSession, Sale, SaleItem, SaleStatus
+from .services import cash_sales_total_for_session, expected_cash_for_session
+
+
+class CashRegisterSessionSerializer(serializers.ModelSerializer):
+    branch_name = serializers.CharField(source="branch.name", read_only=True)
+    cashier_name = serializers.SerializerMethodField()
+    cash_sales_total = serializers.SerializerMethodField()
+    expected_cash = serializers.SerializerMethodField()
+    difference = serializers.SerializerMethodField()
+
+    class Meta:
+        model = CashRegisterSession
+        fields = [
+            "id",
+            "branch",
+            "branch_name",
+            "cashier",
+            "cashier_name",
+            "business_date",
+            "status",
+            "opening_amount",
+            "closing_amount",
+            "cash_sales_total",
+            "expected_cash",
+            "difference",
+            "opened_at",
+            "closed_at",
+            "created_at",
+            "updated_at",
+        ]
+        read_only_fields = fields
+
+    def get_cashier_name(self, obj):
+        full_name = obj.cashier.get_full_name()
+        return full_name or obj.cashier.username
+
+    def get_cash_sales_total(self, obj):
+        return cash_sales_total_for_session(obj)
+
+    def get_expected_cash(self, obj):
+        return expected_cash_for_session(obj)
+
+    def get_difference(self, obj):
+        if obj.closing_amount is None:
+            return None
+        return obj.closing_amount - expected_cash_for_session(obj)
+
+
+class CashRegisterOpenSerializer(serializers.Serializer):
+    opening_amount = serializers.DecimalField(max_digits=14, decimal_places=2, min_value=Decimal("0.00"))
+
+
+class CashRegisterCloseSerializer(serializers.Serializer):
+    closing_amount = serializers.DecimalField(max_digits=14, decimal_places=2, min_value=Decimal("0.00"))
 
 
 class SaleItemSerializer(serializers.ModelSerializer):

@@ -23,6 +23,14 @@ export function useSaleActions({ state, dispatch, syncDraftNow }) {
       return;
     }
 
+    if (!state.cashRegisterSession) {
+      dispatch({
+        type: POS_ACTIONS.SET_ERROR,
+        payload: "Debes abrir caja antes de confirmar ventas.",
+      });
+      return;
+    }
+
     dispatch({ type: POS_ACTIONS.SET_SYNC_STATUS, payload: "syncing" });
 
     try {
@@ -42,7 +50,7 @@ export function useSaleActions({ state, dispatch, syncDraftNow }) {
     } catch (error) {
       dispatch({ type: POS_ACTIONS.SET_ERROR, payload: getPosErrorMessage(error) });
     }
-  }, [dispatch, state.branchId, state.cartItems, state.draftSaleId, syncDraftNow]);
+  }, [dispatch, state.branchId, state.cartItems, state.cashRegisterSession, state.draftSaleId, syncDraftNow]);
 
   const clearSale = useCallback(() => {
     dispatch({ type: POS_ACTIONS.RESET });

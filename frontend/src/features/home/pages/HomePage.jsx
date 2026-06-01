@@ -1,7 +1,9 @@
 import { useEffect, useMemo, useState } from "react";
 import { Link } from "react-router-dom";
 
+import { Button } from "../../../components/common/Button";
 import { useAuth } from "../../../contexts/AuthContext";
+import { extractApiErrorMessage } from "../../../lib/apiError";
 import { APP_ROLES } from "../../auth/constants/roles";
 import {
   listStocks,
@@ -12,7 +14,7 @@ import {
   listSuppliers,
   unwrapResults as unwrapPurchaseResults,
 } from "../../purchases/api/purchasesApi";
-import { listSales } from "../../pos/api/salesApi";
+import { closeCashRegister, getCurrentCashRegister, listSales, openCashRegister } from "../../pos/api/salesApi";
 import {
   getInventoryReport,
   getPurchasesReport,
@@ -197,6 +199,61 @@ function Panel({ title, subtitle, actions, children }) {
 
 function EmptyState({ children = "No hay datos disponibles." }) {
   return <p className="dashboard-empty">{children}</p>;
+}
+
+function CashRegisterModal({ mode, onClose, onSubmit, open, suggestedAmount }) {
+  const [amount, setAmount] = useState("");
+
+  useEffect(() => {
+    if (open && mode === "close") {
+      setAmount(Number(suggestedAmount || 0).toFixed(2));
+    }
+    if (open && mode === "open") {
+      setAmount("");
+    }
+  }, [mode, open, suggestedAmount]);
+
+  if (!open) return null;
+
+  const isClosing = mode === "close";
+
+  function handleSubmit(event) {
+    event.preventDefault();
+    onSubmit(amount);
+  }
+
+  return (
+    <div className="dashboard-modal-backdrop">
+      <form className="dashboard-modal" onSubmit={handleSubmit}>
+        <h2>{isClosing ? "Cerrar caja" : "Abrir caja"}</h2>
+        <p>
+          {isClosing
+            ? "Ingresa el efectivo contado al finalizar el dia."
+            : "Ingresa el efectivo inicial con el que abre la caja."}
+        </p>
+        <label>
+          <span>Monto en efectivo</span>
+          <input
+            autoFocus
+            min="0"
+            onChange={(event) => setAmount(event.target.value)}
+            step="0.01"
+            type="number"
+            value={amount}
+          />
+        </label>
+        {isClosing ? (
+          <small>Efectivo esperado: {formatMoney(suggestedAmount)}</small>
+        ) : null}
+        <div className="dashboard-modal__actions">
+          <Button type="submit">{isClosing ? "Cerrar caja" : "Abrir caja"}</Button>
+          <Button onClick={onClose} type="button" variant="secondary">
+            Cancelar
+          </Button>
+        </div>
+      </form>
+    </div>
+  );
 }
 
 function AdminDashboard({ data }) {
@@ -443,13 +500,23 @@ function PurchasesDashboard({ data }) {
   );
 }
 
-function PosDashboard({ user, data }) {
+function PosDashboard({ data, isCashRegisterBusy, onCloseCashRegister, onOpenCashRegister, user }) {
+  const [cashModal, setCashModal] = useState(null);
   const todaysSales = data.sales.filter(
     (sale) => sale.status === "CONFIRMED" && isToday(saleDate(sale))
   );
   const totalSold = todaysSales.reduce((total, sale) => total + Number(sale.total || 0), 0);
   const averageTicket = todaysSales.length ? totalSold / todaysSales.length : 0;
   const topProduct = buildTopProducts(todaysSales)[0];
+  const cashRegister = data.cashRegisterSession;
+  const isCashOpen = cashRegister?.status === "OPEN";
+  const expectedCash = Number(cashRegister?.expected_cash || 0);
+
+  async function handleCashSubmit(amount) {
+    const success =
+      cashModal === "close" ? await onCloseCashRegister(amount) : await onOpenCashRegister(amount);
+    if (success) setCashModal(null);
+  }
 
   return (
     <div className="dashboard">
@@ -457,13 +524,40 @@ function PosDashboard({ user, data }) {
         <div>
           <p>Sucursal: {user?.branch_name || "Sin sucursal"}</p>
           <h1>Turno de ventas</h1>
-          <span>Caja: no configurada</span>
+          <span>{isCashOpen ? "Caja abierta" : "Caja cerrada"}</span>
+          {isCashOpen ? (
+            <small>
+              Apertura {formatMoney(cashRegister.opening_amount)} | Efectivo esperado{" "}
+              {formatMoney(expectedCash)}
+            </small>
+          ) : null}
         </div>
         <div className="dashboard-pos-actions">
-          <Link to="/pos" className="dashboard-big-action">
-            <strong>Nueva venta</strong>
-            <span>Abrir POS</span>
-          </Link>
+          {isCashOpen ? (
+            <Link to="/pos" className="dashboard-big-action">
+              <strong>Nueva venta</strong>
+              <span>Abrir POS</span>
+            </Link>
+          ) : (
+            <button
+              className="dashboard-big-action"
+              disabled={isCashRegisterBusy}
+              onClick={() => setCashModal("open")}
+              type="button"
+            >
+              <strong>Abrir caja</strong>
+              <span>Monto inicial</span>
+            </button>
+          )}
+          <button
+            className="dashboard-big-action dashboard-big-action--muted"
+            disabled={!isCashOpen || isCashRegisterBusy}
+            onClick={() => setCashModal("close")}
+            type="button"
+          >
+            <strong>Cerrar caja</strong>
+            <span>Conteo final</span>
+          </button>
           <Link to="/pos" className="dashboard-big-action dashboard-big-action--muted">
             <strong>Mis ventas hoy</strong>
             <span>Historial</span>
@@ -484,6 +578,10 @@ function PosDashboard({ user, data }) {
           <div>
             <span>Ticket promedio</span>
             <strong>{formatMoney(averageTicket)}</strong>
+          </div>
+          <div>
+            <span>Efectivo esperado</span>
+            <strong>{formatMoney(expectedCash)}</strong>
           </div>
           <div>
             <span>Producto más vendido</span>
@@ -512,6 +610,13 @@ function PosDashboard({ user, data }) {
           <EmptyState>Sin ventas confirmadas hoy.</EmptyState>
         )}
       </Panel>
+      <CashRegisterModal
+        mode={cashModal}
+        onClose={() => setCashModal(null)}
+        onSubmit={handleCashSubmit}
+        open={Boolean(cashModal)}
+        suggestedAmount={expectedCash}
+      />
     </div>
   );
 }
@@ -526,8 +631,10 @@ export function HomePage() {
     salesReport: null,
     purchasesReport: null,
     inventoryReport: null,
+    cashRegisterSession: null,
   });
   const [isLoading, setIsLoading] = useState(true);
+  const [isCashRegisterBusy, setIsCashRegisterBusy] = useState(false);
   const [error, setError] = useState("");
 
   const role = user?.role;
@@ -569,7 +676,10 @@ export function HomePage() {
         }
 
         if (role === APP_ROLES.SALES) {
-          requests.push(listSales().then((value) => ["sales", unwrap(value)]));
+          requests.push(
+            listSales().then((value) => ["sales", unwrap(value)]),
+            getCurrentCashRegister().then((value) => ["cashRegisterSession", value.session])
+          );
         }
 
         const results = await Promise.all(requests);
@@ -585,6 +695,7 @@ export function HomePage() {
           salesReport: null,
           purchasesReport: null,
           inventoryReport: null,
+          cashRegisterSession: null,
           ...Object.fromEntries(results),
         }));
       } catch (loadError) {
@@ -603,6 +714,38 @@ export function HomePage() {
       isActive = false;
     };
   }, [role, user?.branch]);
+
+  async function handleOpenCashRegister(amount) {
+    setIsCashRegisterBusy(true);
+    setError("");
+
+    try {
+      const session = await openCashRegister({ opening_amount: amount });
+      setData((current) => ({ ...current, cashRegisterSession: session }));
+      return true;
+    } catch (requestError) {
+      setError(extractApiErrorMessage(requestError, "No se pudo abrir caja."));
+      return false;
+    } finally {
+      setIsCashRegisterBusy(false);
+    }
+  }
+
+  async function handleCloseCashRegister(amount) {
+    setIsCashRegisterBusy(true);
+    setError("");
+
+    try {
+      const session = await closeCashRegister({ closing_amount: amount });
+      setData((current) => ({ ...current, cashRegisterSession: session }));
+      return true;
+    } catch (requestError) {
+      setError(extractApiErrorMessage(requestError, "No se pudo cerrar caja."));
+      return false;
+    } finally {
+      setIsCashRegisterBusy(false);
+    }
+  }
 
   const title = useMemo(() => {
     if (role === APP_ROLES.PURCHASES) return "Dashboard de compras";
@@ -628,7 +771,13 @@ export function HomePage() {
         <PurchasesDashboard data={data} />
       ) : null}
       {!isLoading && !error && role === APP_ROLES.SALES ? (
-        <PosDashboard user={user} data={data} />
+        <PosDashboard
+          data={data}
+          isCashRegisterBusy={isCashRegisterBusy}
+          onCloseCashRegister={handleCloseCashRegister}
+          onOpenCashRegister={handleOpenCashRegister}
+          user={user}
+        />
       ) : null}
     </div>
   );

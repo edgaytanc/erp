@@ -54,6 +54,34 @@
   font-weight: 700;
 }
 
+.pos-cash-status {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.75rem;
+  padding: 0.85rem 1rem;
+  border: 1px solid #fde68a;
+  border-radius: 0.5rem;
+  background: #fffbeb;
+  color: #92400e;
+}
+
+.pos-cash-status--open {
+  border-color: #bbf7d0;
+  background: #f0fdf4;
+  color: #166534;
+}
+
+.pos-cash-status strong {
+  color: inherit;
+}
+
+.pos-cash-status span {
+  color: #526176;
+  font-weight: 700;
+}
+
 .pos-shell__grid {
   display: grid;
   grid-template-columns: minmax(0, 1fr) 360px;

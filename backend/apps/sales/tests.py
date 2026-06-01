@@ -12,6 +12,7 @@ from apps.core.models import Branch, Company
 from apps.inventory.models import Category, Product, ReferenceType, Stock, StockMovement
 from apps.inventory.services import register_purchase_entry
 from apps.sales.models import Sale, SaleStatus
+from apps.sales.services import open_cash_session
 
 
 class SalesApiIntegrationTestCase(APITestCase):
@@ -98,6 +99,13 @@ class SalesApiIntegrationTestCase(APITestCase):
     def authenticate_purchases(self):
         self.client.force_authenticate(user=self.purchases_user)
 
+    def open_cash_register(self):
+        return open_cash_session(
+            branch=self.branch,
+            cashier=self.sales_user,
+            opening_amount=Decimal("100.00"),
+        )
+
     def sale_payload(self):
         return {
             "branch": str(self.branch.id),
@@ -181,6 +189,7 @@ class SalesApiIntegrationTestCase(APITestCase):
 
     def test_confirm_sale_impacts_inventory(self):
         self.authenticate_sales()
+        self.open_cash_register()
         create_response = self.client.post(reverse("sales-list"), self.sale_payload(), format="json")
         sale_id = create_response.data["id"]
 
@@ -199,8 +208,18 @@ class SalesApiIntegrationTestCase(APITestCase):
             2,
         )
 
+    def test_confirm_sale_requires_open_cash_register(self):
+        self.authenticate_sales()
+        create_response = self.client.post(reverse("sales-list"), self.sale_payload(), format="json")
+        sale_id = create_response.data["id"]
+
+        response = self.client.post(reverse("sales-confirm", args=[sale_id]), {}, format="json")
+        self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
+        self.assertIn("abrir caja", response.data["detail"].lower())
+
     def test_confirm_sale_is_idempotent(self):
         self.authenticate_sales()
+        self.open_cash_register()
         create_response = self.client.post(reverse("sales-list"), self.sale_payload(), format="json")
         sale_id = create_response.data["id"]
 
@@ -217,6 +236,7 @@ class SalesApiIntegrationTestCase(APITestCase):
 
     def test_confirm_sale_rejects_insufficient_stock(self):
         self.authenticate_sales()
+        self.open_cash_register()
         payload = self.sale_payload()
         payload["items"][0]["qty"] = "99.000"
         create_response = self.client.post(reverse("sales-list"), payload, format="json")
@@ -228,6 +248,7 @@ class SalesApiIntegrationTestCase(APITestCase):
 
     def test_cannot_edit_confirmed_sale(self):
         self.authenticate_sales()
+        self.open_cash_register()
         create_response = self.client.post(reverse("sales-list"), self.sale_payload(), format="json")
         sale_id = create_response.data["id"]
         self.client.post(reverse("sales-confirm", args=[sale_id]), {}, format="json")
@@ -242,6 +263,7 @@ class SalesApiIntegrationTestCase(APITestCase):
 
     def test_void_sale_reverts_stock(self):
         self.authenticate_sales()
+        self.open_cash_register()
         create_response = self.client.post(reverse("sales-list"), self.sale_payload(), format="json")
         sale_id = create_response.data["id"]
         self.client.post(reverse("sales-confirm", args=[sale_id]), {}, format="json")
@@ -267,6 +289,7 @@ class SalesApiIntegrationTestCase(APITestCase):
 
     def test_void_sale_is_idempotent(self):
         self.authenticate_sales()
+        self.open_cash_register()
         create_response = self.client.post(reverse("sales-list"), self.sale_payload(), format="json")
         sale_id = create_response.data["id"]
         self.client.post(reverse("sales-confirm", args=[sale_id]), {}, format="json")
@@ -283,6 +306,7 @@ class SalesApiIntegrationTestCase(APITestCase):
 
     def test_sales_role_cannot_void_after_window(self):
         self.authenticate_sales()
+        self.open_cash_register()
         create_response = self.client.post(reverse("sales-list"), self.sale_payload(), format="json")
         sale_id = create_response.data["id"]
         self.client.post(reverse("sales-confirm", args=[sale_id]), {}, format="json")
@@ -297,6 +321,7 @@ class SalesApiIntegrationTestCase(APITestCase):
 
     def test_admin_can_void_after_window(self):
         self.authenticate_sales()
+        self.open_cash_register()
         create_response = self.client.post(reverse("sales-list"), self.sale_payload(), format="json")
         sale_id = create_response.data["id"]
         self.client.post(reverse("sales-confirm", args=[sale_id]), {}, format="json")
@@ -312,6 +337,7 @@ class SalesApiIntegrationTestCase(APITestCase):
 
     def test_ticket_endpoint_returns_company_and_items(self):
         self.authenticate_sales()
+        self.open_cash_register()
         create_response = self.client.post(reverse("sales-list"), self.sale_payload(), format="json")
         sale_id = create_response.data["id"]
         self.client.post(reverse("sales-confirm", args=[sale_id]), {}, format="json")

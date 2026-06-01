@@ -15,6 +15,11 @@ export async function getSalesByCategoryReport(params = {}) {
   return response.data;
 }
 
+export async function getCashRegisterReport(params = {}) {
+  const response = await api.get("/reports/sales/cash-register/", { params });
+  return response.data;
+}
+
 export async function getPurchasesReport(params = {}) {
   const response = await api.get("/reports/purchases/", { params });
   return response.data;

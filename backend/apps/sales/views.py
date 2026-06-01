@@ -7,9 +7,81 @@ from rest_framework.response import Response
 
 from apps.accounts.permissions import ModuleRolePermission
 from apps.inventory.services import BusinessRuleError, InsufficientStockError
-from .models import Sale, SaleStatus
-from .serializers import SaleSerializer, SaleTicketSerializer, SaleVoidSerializer
-from .services import confirm_sale, recompute_totals_for_update, void_sale
+from .models import CashRegisterSession, Sale, SaleStatus
+from .serializers import (
+    CashRegisterCloseSerializer,
+    CashRegisterOpenSerializer,
+    CashRegisterSessionSerializer,
+    SaleSerializer,
+    SaleTicketSerializer,
+    SaleVoidSerializer,
+)
+from .services import close_cash_session, confirm_sale, open_cash_session, recompute_totals_for_update, void_sale
+
+
+class CashRegisterViewSet(viewsets.ReadOnlyModelViewSet):
+    module_name = "sales"
+    permission_classes = [ModuleRolePermission]
+    serializer_class = CashRegisterSessionSerializer
+
+    def get_queryset(self):
+        qs = CashRegisterSession.objects.select_related("branch", "cashier").all().order_by("-opened_at")
+        user = self.request.user
+
+        if getattr(user, "branch_id", None):
+            qs = qs.filter(branch_id=user.branch_id)
+        elif not getattr(user, "is_admin", lambda: False)():
+            qs = qs.none()
+
+        return qs
+
+    def _user_branch(self):
+        branch = getattr(self.request.user, "branch", None)
+        if not branch:
+            raise ValidationError({"branch": "Tu usuario no tiene una sucursal asignada."})
+        return branch
+
+    @action(detail=False, methods=["get"], url_path="current")
+    def current(self, request):
+        session = (
+            self.get_queryset()
+            .filter(cashier=request.user, status="OPEN")
+            .order_by("-opened_at")
+            .first()
+        )
+        if not session:
+            return Response({"session": None}, status=status.HTTP_200_OK)
+        return Response({"session": self.get_serializer(session).data}, status=status.HTTP_200_OK)
+
+    @action(detail=False, methods=["post"], url_path="open")
+    def open(self, request):
+        serializer = CashRegisterOpenSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+
+        try:
+            session = open_cash_session(
+                branch=self._user_branch(),
+                cashier=request.user,
+                opening_amount=serializer.validated_data["opening_amount"],
+            )
+            return Response(self.get_serializer(session).data, status=status.HTTP_201_CREATED)
+        except BusinessRuleError as exc:
+            return Response({"detail": str(exc)}, status=status.HTTP_400_BAD_REQUEST)
+
+    @action(detail=False, methods=["post"], url_path="close")
+    def close(self, request):
+        serializer = CashRegisterCloseSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+
+        try:
+            session = close_cash_session(
+                branch=self._user_branch(),
+                cashier=request.user,
+                closing_amount=serializer.validated_data["closing_amount"],
+            )
+            return Response(self.get_serializer(session).data, status=status.HTTP_200_OK)
+        except BusinessRuleError as exc:
+            return Response({"detail": str(exc)}, status=status.HTTP_400_BAD_REQUEST)
 
 
 class SaleViewSet(viewsets.ModelViewSet):

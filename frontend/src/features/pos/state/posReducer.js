@@ -58,6 +58,12 @@ export function posReducer(state, action) {
         draftSaleId: null,
         lastError: null,
       };
+    case POS_ACTIONS.SET_CASH_REGISTER:
+      return {
+        ...state,
+        cashRegisterSession: action.payload?.session || null,
+        isCashRegisterLoading: Boolean(action.payload?.isLoading),
+      };
     case POS_ACTIONS.ADD_ITEM: {
       const product = action.payload;
       const existingItem = state.cartItems.find((item) => item.productId === product.productId);
@@ -127,7 +133,13 @@ export function posReducer(state, action) {
     case POS_ACTIONS.CLEAR_ERROR:
       return { ...state, lastError: null };
     case POS_ACTIONS.RESET:
-      return { ...posInitialState, branchId: state.branchId, branchName: state.branchName };
+      return {
+        ...posInitialState,
+        branchId: state.branchId,
+        branchName: state.branchName,
+        cashRegisterSession: state.cashRegisterSession,
+        isCashRegisterLoading: state.isCashRegisterLoading,
+      };
     default:
       return state;
   }

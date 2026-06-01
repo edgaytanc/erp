@@ -3,6 +3,8 @@ export const posInitialState = {
   draftSale: null,
   branchId: null,
   branchName: "",
+  cashRegisterSession: null,
+  isCashRegisterLoading: true,
   searchTerm: "",
   searchResults: [],
   selectedResultIndex: 0,

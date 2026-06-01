@@ -13,7 +13,8 @@ from apps.accounts.permissions import IsAdminRole
 from apps.core.models import Branch
 from apps.inventory.models import Stock, StockMovement
 from apps.purchases.models import Purchase, PurchaseItem, PurchaseStatus
-from apps.sales.models import Sale, SaleItem, SaleStatus
+from apps.sales.models import CashRegisterSession, CashRegisterStatus, Sale, SaleItem, SaleStatus
+from apps.sales.services import cash_sales_total_for_session, expected_cash_for_session
 
 
 ZERO = Decimal("0.00")
@@ -38,6 +39,12 @@ class AdminReportView(APIView):
         branch_id = self.request.query_params.get("branch")
         if branch_id:
             queryset = queryset.filter(**{branch_field: branch_id})
+        return queryset
+
+    def apply_cashier_filter(self, queryset, cashier_field="cashier"):
+        cashier_id = self.request.query_params.get("cashier")
+        if cashier_id:
+            queryset = queryset.filter(**{cashier_field: cashier_id})
         return queryset
 
     def money(self, value):
@@ -378,6 +385,104 @@ class SalesByCategoryReportView(AdminReportView):
                     }
                     for row in rows
                 ],
+            }
+        )
+
+
+class CashRegisterMovementsReportView(AdminReportView):
+    def get(self, request):
+        date_from, date_to = self.get_date_range(request)
+        qs = CashRegisterSession.objects.select_related("branch", "cashier").all()
+        qs = self.apply_date_filter(qs, "opened_at", date_from, date_to)
+        qs = self.apply_branch_filter(qs)
+        qs = self.apply_cashier_filter(qs)
+
+        sessions = list(qs.order_by("-business_date", "-opened_at")[:300])
+        items = []
+        total_opening = ZERO
+        total_closing = ZERO
+        total_expected = ZERO
+        total_difference = ZERO
+        open_count = 0
+        closed_count = 0
+
+        for session in sessions:
+            cash_sales_total = cash_sales_total_for_session(session)
+            expected_cash = expected_cash_for_session(session)
+            difference = (
+                Decimal(session.closing_amount or ZERO) - Decimal(expected_cash)
+                if session.closing_amount is not None
+                else None
+            )
+            cashier_name = session.cashier.get_full_name() or session.cashier.username
+            total_opening += Decimal(session.opening_amount or ZERO)
+            total_expected += Decimal(expected_cash or ZERO)
+
+            if session.status == CashRegisterStatus.OPEN:
+                open_count += 1
+            else:
+                closed_count += 1
+
+            if session.closing_amount is not None:
+                total_closing += Decimal(session.closing_amount or ZERO)
+            if difference is not None:
+                total_difference += difference
+
+            base = {
+                "session": str(session.id),
+                "business_date": session.business_date.isoformat(),
+                "branch": str(session.branch_id),
+                "branch_name": session.branch.name,
+                "cashier": str(session.cashier_id),
+                "cashier_name": cashier_name,
+                "opening_amount": self.money(session.opening_amount),
+                "cash_sales_total": self.money(cash_sales_total),
+                "expected_cash": self.money(expected_cash),
+                "status": session.status,
+            }
+            items.append(
+                {
+                    **base,
+                    "id": f"{session.id}-open",
+                    "movement_type": "Apertura",
+                    "movement_at": session.opened_at.isoformat() if session.opened_at else None,
+                    "amount": self.money(session.opening_amount),
+                    "closing_amount": "",
+                    "difference": "",
+                }
+            )
+            if session.closed_at:
+                items.append(
+                    {
+                        **base,
+                        "id": f"{session.id}-close",
+                        "movement_type": "Cierre",
+                        "movement_at": session.closed_at.isoformat(),
+                        "amount": self.money(session.closing_amount),
+                        "closing_amount": self.money(session.closing_amount),
+                        "difference": self.money(difference),
+                    }
+                )
+
+        return Response(
+            {
+                "filters": {
+                    "date_from": date_from,
+                    "date_to": date_to,
+                    "cashier": request.query_params.get("cashier"),
+                },
+                "scope": self.branch_scope(request),
+                "generated_at": timezone.now().isoformat(),
+                "summary": {
+                    "sessions_count": len(sessions),
+                    "open_count": open_count,
+                    "closed_count": closed_count,
+                    "opening_amount": self.money(total_opening),
+                    "closing_amount": self.money(total_closing),
+                    "expected_cash": self.money(total_expected),
+                    "difference": self.money(total_difference),
+                },
+                "items": items,
             }
         )
 

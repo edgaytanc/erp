@@ -13,7 +13,8 @@ import { TicketPreview } from "./TicketPreview";
 
 export function PosShell({ actions, isProductSearchLoading, searchInputRef, state }) {
   const [isCancelModalOpen, setIsCancelModalOpen] = useState(false);
-  const canConfirm = state.cartItems.length > 0 && state.syncStatus !== "syncing";
+  const hasOpenCashRegister = Boolean(state.cashRegisterSession);
+  const canConfirm = state.cartItems.length > 0 && state.syncStatus !== "syncing" && hasOpenCashRegister;
   const canCancel = state.lastConfirmedSale?.status === "CONFIRMED";
 
   function handleCancelConfirm(reason) {
@@ -24,13 +25,23 @@ export function PosShell({ actions, isProductSearchLoading, searchInputRef, stat
   return (
     <div className="pos-shell">
       <SaleStatusBar cartCount={state.cartItems.length} draftSaleId={state.draftSaleId} status={state.syncStatus} />
+      <section className={hasOpenCashRegister ? "pos-cash-status pos-cash-status--open" : "pos-cash-status"}>
+        <strong>{hasOpenCashRegister ? "Caja abierta" : "Caja cerrada"}</strong>
+        <span>
+          {state.isCashRegisterLoading
+            ? "Validando caja..."
+            : hasOpenCashRegister
+              ? `Apertura Q ${Number(state.cashRegisterSession.opening_amount || 0).toFixed(2)}`
+              : "Abre caja desde el dashboard POS antes de vender."}
+        </span>
+      </section>
       <SaleErrorBanner message={state.lastError} />
 
       <div className="pos-shell__grid">
         <div className="pos-shell__left">
           <BranchPanel branchId={state.branchId} branchName={state.branchName} />
           <ProductSearch
-            disabled={!state.branchId || Boolean(state.lastConfirmedSale)}
+            disabled={!state.branchId || Boolean(state.lastConfirmedSale) || !hasOpenCashRegister}
             inputRef={searchInputRef}
             isLoading={isProductSearchLoading}
             onAddProduct={actions.addProduct}
