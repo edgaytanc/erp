@@ -100,6 +100,12 @@ class ProductViewSet(viewsets.ModelViewSet):
 
         return qs.order_by(*self.ordering)
 
+    def destroy(self, request, *args, **kwargs):
+        product = self.get_object()
+        product.is_active = False
+        product.save(update_fields=["is_active", "updated_at"])
+        return Response(status=204)
+
 
 class StockMovementViewSet(viewsets.ReadOnlyModelViewSet):
     module_name = "inventory"

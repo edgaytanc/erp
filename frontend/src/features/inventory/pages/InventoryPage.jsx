@@ -2,7 +2,15 @@ import { useEffect, useMemo, useState } from "react";
 
 import { Button } from "../../../components/common/Button";
 import { extractApiErrorMessage } from "../../../lib/apiError";
-import { createCategory, createProduct, listCategories, listProducts, unwrapResults } from "../api/inventoryApi";
+import {
+  createCategory,
+  createProduct,
+  deactivateProduct,
+  listCategories,
+  listProducts,
+  unwrapResults,
+  updateProduct,
+} from "../api/inventoryApi";
 import "../../../styles/inventory.css";
 
 const emptyProductForm = {
@@ -22,6 +30,7 @@ export function InventoryPage() {
   const [products, setProducts] = useState([]);
   const [productCount, setProductCount] = useState(0);
   const [productForm, setProductForm] = useState(emptyProductForm);
+  const [editingProductId, setEditingProductId] = useState(null);
   const [categoryName, setCategoryName] = useState("");
   const [searchTerm, setSearchTerm] = useState("");
   const [isLoading, setIsLoading] = useState(true);
@@ -31,6 +40,7 @@ export function InventoryPage() {
   const [success, setSuccess] = useState(null);
 
   const activeCategories = useMemo(() => categories.filter((category) => category.is_active), [categories]);
+  const isEditingProduct = Boolean(editingProductId);
 
   async function loadInventory(nextSearchTerm = searchTerm) {
     setIsLoading(true);
@@ -73,6 +83,32 @@ export function InventoryPage() {
     }));
   }
 
+  function resetProductForm() {
+    setProductForm(emptyProductForm);
+    setEditingProductId(null);
+  }
+
+  function productToForm(product) {
+    return {
+      category: product.category || "",
+      sku: product.sku || "",
+      barcode: product.barcode || "",
+      name: product.name || "",
+      description: product.description || "",
+      sale_price: Number(product.sale_price || 0).toFixed(2),
+      cost_price: Number(product.cost_price || 0).toFixed(2),
+      min_stock: Number(product.min_stock || 0).toFixed(2),
+      is_active: Boolean(product.is_active),
+    };
+  }
+
+  function handleEditProduct(product) {
+    setProductForm(productToForm(product));
+    setEditingProductId(product.id);
+    setError(null);
+    setSuccess(null);
+  }
+
   async function handleCreateCategory(event) {
     event.preventDefault();
 
@@ -98,7 +134,7 @@ export function InventoryPage() {
     }
   }
 
-  async function handleCreateProduct(event) {
+  async function handleSaveProduct(event) {
     event.preventDefault();
     setIsSavingProduct(true);
     setError(null);
@@ -117,14 +153,45 @@ export function InventoryPage() {
         min_stock: Number(productForm.min_stock || 0).toFixed(2),
       };
 
-      await createProduct(payload);
-      setProductForm(emptyProductForm);
-      setSuccess("Producto creado correctamente.");
+      if (isEditingProduct) {
+        await updateProduct(editingProductId, payload);
+        setSuccess("Producto actualizado correctamente.");
+      } else {
+        await createProduct(payload);
+        setSuccess("Producto creado correctamente.");
+      }
+
+      resetProductForm();
       await loadInventory(searchTerm);
     } catch (requestError) {
-      setError(extractApiErrorMessage(requestError, "No se pudo crear el producto."));
+      setError(
+        extractApiErrorMessage(
+          requestError,
+          isEditingProduct ? "No se pudo actualizar el producto." : "No se pudo crear el producto.",
+        ),
+      );
     } finally {
       setIsSavingProduct(false);
+    }
+  }
+
+  async function handleDeactivateProduct(product) {
+    if (!window.confirm(`Desactivar producto "${product.name}"?`)) {
+      return;
+    }
+
+    setError(null);
+    setSuccess(null);
+
+    try {
+      await deactivateProduct(product.id);
+      if (editingProductId === product.id) {
+        resetProductForm();
+      }
+      setSuccess("Producto desactivado correctamente.");
+      await loadInventory(searchTerm);
+    } catch (requestError) {
+      setError(extractApiErrorMessage(requestError, "No se pudo desactivar el producto."));
     }
   }
 
@@ -153,7 +220,7 @@ export function InventoryPage() {
       <div className="inventory-grid">
         <section className="inventory-panel inventory-panel--form">
           <div className="inventory-panel__header">
-            <h3>Nuevo producto</h3>
+            <h3>{isEditingProduct ? "Editar producto" : "Nuevo producto"}</h3>
             <span>{activeCategories.length} categorias</span>
           </div>
 
@@ -169,7 +236,7 @@ export function InventoryPage() {
             </Button>
           </form>
 
-          <form className="inventory-product-form" onSubmit={handleCreateProduct}>
+          <form className="inventory-product-form" onSubmit={handleSaveProduct}>
             <label>
               <span>Categoria</span>
               <select
@@ -268,9 +335,16 @@ export function InventoryPage() {
               <span>Producto activo</span>
             </label>
 
-            <Button disabled={isSavingProduct} type="submit">
-              Guardar producto
-            </Button>
+            <div className="inventory-form-actions">
+              <Button disabled={isSavingProduct} type="submit">
+                {isEditingProduct ? "Guardar cambios" : "Guardar producto"}
+              </Button>
+              {isEditingProduct ? (
+                <Button onClick={resetProductForm} type="button" variant="secondary">
+                  Cancelar
+                </Button>
+              ) : null}
+            </div>
           </form>
         </section>
 
@@ -301,6 +375,19 @@ export function InventoryPage() {
                   <span className={`inventory-badge ${product.is_active ? "inventory-badge--on" : ""}`}>
                     {product.is_active ? "Activo" : "Inactivo"}
                   </span>
+                  <div className="inventory-row-actions">
+                    <Button onClick={() => handleEditProduct(product)} type="button" variant="secondary">
+                      Editar
+                    </Button>
+                    <Button
+                      disabled={!product.is_active}
+                      onClick={() => handleDeactivateProduct(product)}
+                      type="button"
+                      variant="secondary"
+                    >
+                      Desactivar
+                    </Button>
+                  </div>
                 </article>
               ))
             )}
