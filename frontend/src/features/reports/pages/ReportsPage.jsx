@@ -3,14 +3,220 @@ import { useEffect, useMemo, useState } from "react";
 import { Button } from "../../../components/common/Button";
 import { extractApiErrorMessage } from "../../../lib/apiError";
 import { listBranches } from "../../admin/api/adminConfigApi";
-import { getInventoryReport, getPurchasesReport, getSalesReport } from "../api/reportsApi";
+import {
+  getCriticalStockReport,
+  getInventoryByBranchReport,
+  getInventoryMovementsReport,
+  getInventoryValueReport,
+  getPurchasedProductsReport,
+  getPurchasesBySupplierReport,
+  getPurchasesVsSalesReport,
+  getSalesByCategoryReport,
+  getSalesByProductReport,
+} from "../api/reportsApi";
 import "../../../styles/reports.css";
+
+const REPORT_GROUPS = [
+  {
+    id: "sales",
+    label: "Ventas",
+    description: "Analisis de ventas por producto y categoria.",
+    reports: [
+      {
+        id: "sales-product",
+        label: "Ventas por Producto",
+        fetcher: getSalesByProductReport,
+        usesDates: true,
+        summary: [
+          ["Productos", "products_count"],
+          ["Unidades", "units_sold", "number"],
+          ["Total vendido", "total", "money"],
+        ],
+        columns: [
+          ["SKU", "sku"],
+          ["Producto", "name"],
+          ["Categoria", "category_name"],
+          ["Ventas", "sales_count", "number"],
+          ["Unidades", "units_sold", "number"],
+          ["Total", "total", "money"],
+        ],
+      },
+      {
+        id: "sales-category",
+        label: "Ventas por Categoria",
+        fetcher: getSalesByCategoryReport,
+        usesDates: true,
+        summary: [
+          ["Categorias", "categories_count"],
+          ["Unidades", "units_sold", "number"],
+          ["Total vendido", "total", "money"],
+        ],
+        columns: [
+          ["Categoria", "category_name"],
+          ["Productos", "products_count", "number"],
+          ["Ventas", "sales_count", "number"],
+          ["Unidades", "units_sold", "number"],
+          ["Total", "total", "money"],
+        ],
+      },
+    ],
+  },
+  {
+    id: "purchases",
+    label: "Compras",
+    description: "Analisis de proveedores, productos comprados y relacion compras contra ventas.",
+    reports: [
+      {
+        id: "purchases-supplier",
+        label: "Compras por Proveedor",
+        fetcher: getPurchasesBySupplierReport,
+        usesDates: true,
+        summary: [
+          ["Proveedores", "suppliers_count"],
+          ["Compras", "purchases_count", "number"],
+          ["Total comprado", "total_cost", "money"],
+        ],
+        columns: [
+          ["Proveedor", "supplier_name"],
+          ["Compras", "purchases_count", "number"],
+          ["Total", "total_cost", "money"],
+        ],
+      },
+      {
+        id: "purchased-products",
+        label: "Productos mas comprados",
+        fetcher: getPurchasedProductsReport,
+        usesDates: true,
+        summary: [
+          ["Productos", "products_count"],
+          ["Unidades", "units_purchased", "number"],
+          ["Total comprado", "total_cost", "money"],
+        ],
+        columns: [
+          ["SKU", "sku"],
+          ["Producto", "name"],
+          ["Categoria", "category_name"],
+          ["Compras", "purchases_count", "number"],
+          ["Unidades", "units_purchased", "number"],
+          ["Total", "total_cost", "money"],
+        ],
+      },
+      {
+        id: "purchases-vs-sales",
+        label: "Compras vs Ventas",
+        fetcher: getPurchasesVsSalesReport,
+        usesDates: true,
+        summary: [
+          ["Ventas", "sales_total", "money"],
+          ["Compras", "purchases_total", "money"],
+          ["Diferencia", "difference", "money"],
+        ],
+        columns: [
+          ["Sucursal", "branch_name"],
+          ["Ventas", "sales_total", "money"],
+          ["Compras", "purchases_total", "money"],
+          ["Diferencia", "difference", "money"],
+        ],
+      },
+    ],
+  },
+  {
+    id: "inventory",
+    label: "Inventario",
+    description: "Stock critico, valor, distribucion por sucursal y movimientos.",
+    reports: [
+      {
+        id: "critical-stock",
+        label: "Stock Critico",
+        fetcher: getCriticalStockReport,
+        usesDates: false,
+        summary: [["Productos criticos", "critical_count", "number"]],
+        columns: [
+          ["Sucursal", "branch_name"],
+          ["SKU", "sku"],
+          ["Producto", "name"],
+          ["Categoria", "category_name"],
+          ["Stock", "qty_on_hand", "number"],
+          ["Minimo", "min_stock", "number"],
+          ["Faltante", "shortage", "number"],
+        ],
+      },
+      {
+        id: "inventory-value",
+        label: "Valor de Inventario",
+        fetcher: getInventoryValueReport,
+        usesDates: false,
+        summary: [
+          ["SKUs", "sku_count", "number"],
+          ["Unidades", "total_qty", "number"],
+          ["Valor", "inventory_value", "money"],
+        ],
+        columns: [
+          ["Sucursal", "branch_name"],
+          ["SKU", "sku"],
+          ["Producto", "name"],
+          ["Categoria", "category_name"],
+          ["Stock", "qty_on_hand", "number"],
+          ["Costo", "unit_cost", "money"],
+          ["Valor", "inventory_value", "money"],
+        ],
+      },
+      {
+        id: "inventory-branch",
+        label: "Inventario por sucursal",
+        fetcher: getInventoryByBranchReport,
+        usesDates: false,
+        summary: [
+          ["SKUs", "sku_count", "number"],
+          ["Unidades", "total_qty", "number"],
+          ["Stock critico", "critical_count", "number"],
+          ["Valor", "inventory_value", "money"],
+        ],
+        columns: [
+          ["Sucursal", "branch_name"],
+          ["SKUs", "sku_count", "number"],
+          ["Unidades", "total_qty", "number"],
+          ["Stock critico", "critical_count", "number"],
+          ["Valor", "inventory_value", "money"],
+        ],
+      },
+      {
+        id: "inventory-movements",
+        label: "Movimientos de inventario",
+        fetcher: getInventoryMovementsReport,
+        usesDates: true,
+        summary: [
+          ["Movimientos", "movements_count", "number"],
+          ["Entradas", "in_qty", "number"],
+          ["Salidas", "out_qty", "number"],
+        ],
+        columns: [
+          ["Fecha", "created_at", "date"],
+          ["Sucursal", "branch_name"],
+          ["SKU", "sku"],
+          ["Producto", "name"],
+          ["Tipo", "type"],
+          ["Cantidad", "qty", "number"],
+          ["Stock anterior", "stock_before", "number"],
+          ["Stock final", "stock_after", "number"],
+          ["Referencia", "reference_type"],
+        ],
+      },
+    ],
+  },
+];
 
 function formatMoney(value) {
   return new Intl.NumberFormat("es-GT", {
     style: "currency",
     currency: "GTQ",
     minimumFractionDigits: 2,
+  }).format(Number(value || 0));
+}
+
+function formatNumber(value) {
+  return new Intl.NumberFormat("es-GT", {
+    maximumFractionDigits: 2,
   }).format(Number(value || 0));
 }
 
@@ -32,264 +238,237 @@ function escapeHtml(value) {
     .replaceAll("'", "&#039;");
 }
 
-function reportLabel(reportType) {
-  if (reportType === "sales") {
-    return "Reporte de Ventas";
-  }
-  if (reportType === "purchases") {
-    return "Reporte de Compras";
-  }
-  return "Reporte de Inventario";
+function unwrapResults(data) {
+  return Array.isArray(data) ? data : data?.results || [];
 }
 
-function buildPrintableRows(reportType, items) {
-  if (reportType === "sales") {
-    return {
-      headers: ["Fecha", "Sucursal", "Metodo de pago", "Subtotal", "IVA", "Total"],
-      rows: items.map((sale) => [
-        sale.sold_at ? new Date(sale.sold_at).toLocaleString("es-GT") : "Sin fecha",
-        sale.branch_name,
-        sale.payment_method,
-        formatMoney(sale.subtotal),
-        formatMoney(sale.tax),
-        formatMoney(sale.total),
-      ]),
-    };
-  }
+function valueFor(row, key, type) {
+  const value = row?.[key];
 
-  if (reportType === "purchases") {
-    return {
-      headers: ["Fecha", "Sucursal", "Proveedor", "Factura", "Total"],
-      rows: items.map((purchase) => [
-        purchase.purchased_at ? new Date(purchase.purchased_at).toLocaleString("es-GT") : "Sin fecha",
-        purchase.branch_name,
-        purchase.supplier_name,
-        purchase.invoice_number || "-",
-        formatMoney(purchase.total_cost),
-      ]),
-    };
-  }
+  if (type === "money") return formatMoney(value);
+  if (type === "number") return formatNumber(value);
+  if (type === "date") return value ? new Date(value).toLocaleString("es-GT") : "Sin fecha";
+  if (key === "type") return value === "IN" ? "Entrada" : value === "OUT" ? "Salida" : value || "-";
+  return value ?? "-";
+}
 
-  return {
-    headers: ["Sucursal", "SKU", "Producto", "Categoria", "Stock", "Costo", "Precio venta", "Valor"],
-    rows: items.map((item) => [
-      item.branch_name,
-      item.sku,
-      item.name,
-      item.category_name || "-",
-      Number(item.qty_on_hand || 0).toFixed(2),
-      formatMoney(item.unit_cost),
-      formatMoney(item.sale_price),
-      formatMoney(item.inventory_value),
-    ]),
-  };
+function selectedBranchLabel(branchId, branches, data) {
+  if (data?.scope?.branch_name) return data.scope.branch_name;
+  if (!branchId) return "Todas las sucursales";
+  return branches.find((branch) => branch.id === branchId)?.name || "Sucursal seleccionada";
+}
+
+function buildPdfHtml({ report, data, dateFrom, dateTo, branchLabel }) {
+  const rows = data?.items || [];
+  const filters = report.usesDates
+    ? `Desde: ${dateFrom || "Inicio"} · Hasta: ${dateTo || "Hoy"} · Sucursal: ${branchLabel}`
+    : `Sucursal: ${branchLabel}`;
+  const rowsHtml = rows.length
+    ? rows
+        .map(
+          (row) =>
+            `<tr>${report.columns
+              .map(([, key, type]) => `<td>${escapeHtml(valueFor(row, key, type))}</td>`)
+              .join("")}</tr>`
+        )
+        .join("")
+    : `<tr><td colspan="${report.columns.length}">Sin datos para los filtros seleccionados.</td></tr>`;
+
+  return `
+    <!doctype html>
+    <html lang="es">
+      <head>
+        <meta charset="utf-8" />
+        <title>${escapeHtml(report.label)}</title>
+        <style>
+          body {
+            font-family: Inter, Arial, sans-serif;
+            color: #142033;
+            margin: 0;
+            padding: 24px;
+            background: #f8fafc;
+          }
+          .print-shell {
+            max-width: 1180px;
+            margin: 0 auto;
+            background: #ffffff;
+            border: 1px solid #dfe8f4;
+            border-radius: 8px;
+            overflow: hidden;
+          }
+          header {
+            display: flex;
+            justify-content: space-between;
+            gap: 16px;
+            padding: 20px;
+            border-bottom: 1px solid #edf2f7;
+          }
+          h1 {
+            margin: 0;
+            font-size: 24px;
+          }
+          p {
+            margin: 6px 0 0;
+            color: #526176;
+          }
+          button {
+            border: 0;
+            border-radius: 8px;
+            padding: 12px 16px;
+            background: #2563eb;
+            color: #ffffff;
+            font-weight: 700;
+            cursor: pointer;
+          }
+          main {
+            padding: 20px;
+          }
+          table {
+            width: 100%;
+            border-collapse: collapse;
+            font-size: 12px;
+          }
+          th, td {
+            border-bottom: 1px solid #e5edf7;
+            padding: 9px;
+            text-align: left;
+            vertical-align: top;
+          }
+          th {
+            background: #f1f5f9;
+            font-weight: 800;
+          }
+          @media print {
+            body {
+              padding: 0;
+              background: #ffffff;
+            }
+            .print-shell {
+              max-width: none;
+              border: 0;
+              border-radius: 0;
+            }
+            .print-actions {
+              display: none;
+            }
+            table {
+              font-size: 10px;
+            }
+            th, td {
+              padding: 6px;
+            }
+          }
+        </style>
+      </head>
+      <body>
+        <section class="print-shell">
+          <header>
+            <div>
+              <h1>${escapeHtml(report.label)}</h1>
+              <p>${escapeHtml(filters)}</p>
+              <p>Generado: ${escapeHtml(new Date().toLocaleString("es-GT"))}</p>
+            </div>
+            <div class="print-actions">
+              <button onclick="window.print()">Imprimir / guardar PDF</button>
+            </div>
+          </header>
+          <main>
+            <table>
+              <thead>
+                <tr>${report.columns.map(([label]) => `<th>${escapeHtml(label)}</th>`).join("")}</tr>
+              </thead>
+              <tbody>${rowsHtml}</tbody>
+            </table>
+          </main>
+        </section>
+      </body>
+    </html>
+  `;
 }
 
 export function ReportsPage() {
-  const [activeReport, setActiveReport] = useState("sales");
+  const [activeGroupId, setActiveGroupId] = useState("sales");
+  const [activeReportId, setActiveReportId] = useState(REPORT_GROUPS[0].reports[0].id);
   const [dateFrom, setDateFrom] = useState(monthStartIsoDate);
   const [dateTo, setDateTo] = useState(todayIsoDate);
   const [branchId, setBranchId] = useState("");
   const [branches, setBranches] = useState([]);
-  const [salesReport, setSalesReport] = useState(null);
-  const [purchasesReport, setPurchasesReport] = useState(null);
-  const [inventoryReport, setInventoryReport] = useState(null);
+  const [reportData, setReportData] = useState(null);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState(null);
 
-  const activeData = useMemo(() => {
-    if (activeReport === "sales") {
-      return salesReport;
-    }
-    if (activeReport === "purchases") {
-      return purchasesReport;
-    }
-    return inventoryReport;
-  }, [activeReport, inventoryReport, purchasesReport, salesReport]);
+  const activeGroup = useMemo(
+    () => REPORT_GROUPS.find((group) => group.id === activeGroupId) || REPORT_GROUPS[0],
+    [activeGroupId]
+  );
+  const activeReport = useMemo(
+    () =>
+      activeGroup.reports.find((report) => report.id === activeReportId) || activeGroup.reports[0],
+    [activeGroup, activeReportId]
+  );
+  const branchLabel = selectedBranchLabel(branchId, branches, reportData);
 
-  async function loadReports() {
+  async function loadReport() {
     setIsLoading(true);
     setError(null);
 
     try {
-      const dateParams = { date_from: dateFrom, date_to: dateTo };
-      const [branchesResponse, salesResponse, purchasesResponse, inventoryResponse] = await Promise.all([
-        listBranches({ is_active: true }),
-        getSalesReport(dateParams),
-        getPurchasesReport(dateParams),
-        getInventoryReport({ branch: branchId }),
+      const params = { branch: branchId || undefined };
+      if (activeReport.usesDates) {
+        params.date_from = dateFrom;
+        params.date_to = dateTo;
+      }
+
+      const [branchesResponse, reportResponse] = await Promise.all([
+        branches.length ? Promise.resolve(branches) : listBranches({ is_active: true }),
+        activeReport.fetcher(params),
       ]);
 
-      setBranches(Array.isArray(branchesResponse) ? branchesResponse : branchesResponse?.results || []);
-      setSalesReport(salesResponse);
-      setPurchasesReport(purchasesResponse);
-      setInventoryReport(inventoryResponse);
+      setBranches(unwrapResults(branchesResponse));
+      setReportData(reportResponse);
     } catch (requestError) {
-      setError(extractApiErrorMessage(requestError, "No se pudieron cargar los reportes."));
+      setError(extractApiErrorMessage(requestError, "No se pudo cargar el reporte."));
     } finally {
       setIsLoading(false);
     }
   }
 
   useEffect(() => {
-    loadReports();
+    loadReport();
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+  }, [activeReportId]);
+
+  function handleGroupChange(group) {
+    setActiveGroupId(group.id);
+    setActiveReportId(group.reports[0].id);
+    setReportData(null);
+  }
 
   function handleApplyFilters(event) {
     event.preventDefault();
-    loadReports();
+    loadReport();
   }
 
   function handleGeneratePdf() {
-    if (!activeData) {
-      return;
-    }
+    if (!reportData) return;
 
     const printable = window.open("about:blank", "_blank");
-
     if (!printable) {
-      setError("No se pudo abrir la pestaña del reporte. Revisa si el navegador bloqueo ventanas emergentes.");
+      setError(
+        "No se pudo abrir la pestaña del reporte. Revisa si el navegador bloqueo ventanas emergentes."
+      );
       return;
     }
 
-    const reportTitle = reportLabel(activeReport);
-    const selectedBranch = branchId ? branches.find((branch) => branch.id === branchId)?.name : "Todas";
-    const detail = buildPrintableRows(activeReport, activeData.items || []);
-    const filters =
-      activeReport === "inventory"
-        ? `Sucursal: ${selectedBranch || "Todas"}`
-        : `Desde: ${dateFrom || "Inicio"} · Hasta: ${dateTo || "Hoy"} · Sucursal: ${selectedBranch || "Todas"}`;
-    const rowsHtml =
-      detail.rows.length > 0
-        ? detail.rows
-            .map((row) => `<tr>${row.map((cell) => `<td>${escapeHtml(cell)}</td>`).join("")}</tr>`)
-            .join("")
-        : `<tr><td colspan="${detail.headers.length}">Sin datos para los filtros seleccionados.</td></tr>`;
-
-    printable.document.write(`
-      <!doctype html>
-      <html lang="es">
-        <head>
-          <meta charset="utf-8" />
-          <title>${escapeHtml(reportTitle)} ${escapeHtml(dateFrom)} ${escapeHtml(dateTo)}</title>
-          <style>
-            body {
-              font-family: Inter, Arial, sans-serif;
-              color: #142033;
-              margin: 0;
-              padding: 24px;
-              background: #f8fafc;
-            }
-            .print-shell {
-              max-width: 1120px;
-              margin: 0 auto;
-              background: #ffffff;
-              border: 1px solid #dfe8f4;
-              border-radius: 8px;
-              overflow: hidden;
-            }
-            header {
-              display: flex;
-              justify-content: space-between;
-              gap: 16px;
-              padding: 20px;
-              border-bottom: 1px solid #edf2f7;
-            }
-            h1 {
-              margin: 0;
-              font-size: 24px;
-            }
-            p {
-              margin: 6px 0 0;
-              color: #526176;
-            }
-            .print-actions {
-              display: flex;
-              align-items: start;
-              gap: 8px;
-            }
-            button {
-              border: 0;
-              border-radius: 8px;
-              padding: 12px 16px;
-              background: #2563eb;
-              color: #ffffff;
-              font-weight: 700;
-              cursor: pointer;
-            }
-            main {
-              padding: 20px;
-            }
-            table {
-              width: 100%;
-              border-collapse: collapse;
-              font-size: 13px;
-            }
-            th, td {
-              border-bottom: 1px solid #e5edf7;
-              padding: 10px;
-              text-align: left;
-              vertical-align: top;
-            }
-            th {
-              background: #f1f5f9;
-              font-weight: 800;
-            }
-            td:last-child,
-            th:last-child {
-              text-align: right;
-            }
-            .meta {
-              display: grid;
-              gap: 4px;
-            }
-            @media print {
-              body {
-                padding: 0;
-                background: #ffffff;
-              }
-              .print-shell {
-                max-width: none;
-                border: 0;
-                border-radius: 0;
-              }
-              .print-actions {
-                display: none;
-              }
-              table {
-                font-size: 11px;
-              }
-              th, td {
-                padding: 7px;
-              }
-            }
-          </style>
-        </head>
-        <body>
-          <section class="print-shell">
-            <header>
-              <div class="meta">
-                <h1>${escapeHtml(reportTitle)}</h1>
-                <p>${escapeHtml(filters)}</p>
-                <p>Generado: ${escapeHtml(new Date().toLocaleString("es-GT"))}</p>
-              </div>
-              <div class="print-actions">
-                <button onclick="window.print()">Imprimir / guardar PDF</button>
-              </div>
-            </header>
-            <main>
-              <table>
-                <thead>
-                  <tr>${detail.headers.map((header) => `<th>${escapeHtml(header)}</th>`).join("")}</tr>
-                </thead>
-                <tbody>${rowsHtml}</tbody>
-              </table>
-            </main>
-          </section>
-        </body>
-      </html>
-    `);
+    printable.document.write(
+      buildPdfHtml({
+        report: activeReport,
+        data: reportData,
+        dateFrom,
+        dateTo,
+        branchLabel,
+      })
+    );
     printable.document.close();
     printable.focus();
   }
@@ -299,38 +478,49 @@ export function ReportsPage() {
       <section className="reports-toolbar">
         <div>
           <h2>Reportes</h2>
-          <p>Ventas, compras e inventario valorizado.</p>
+          <p>{activeGroup.description}</p>
         </div>
         <div className="reports-tabs" role="tablist" aria-label="Tipos de reporte">
-          <button
-            className={activeReport === "sales" ? "reports-tab reports-tab--active" : "reports-tab"}
-            onClick={() => setActiveReport("sales")}
-            type="button"
-          >
-            Ventas
-          </button>
-          <button
-            className={activeReport === "purchases" ? "reports-tab reports-tab--active" : "reports-tab"}
-            onClick={() => setActiveReport("purchases")}
-            type="button"
-          >
-            Compras
-          </button>
-          <button
-            className={activeReport === "inventory" ? "reports-tab reports-tab--active" : "reports-tab"}
-            onClick={() => setActiveReport("inventory")}
-            type="button"
-          >
-            Inventario
-          </button>
+          {REPORT_GROUPS.map((group) => (
+            <button
+              className={
+                activeGroupId === group.id ? "reports-tab reports-tab--active" : "reports-tab"
+              }
+              key={group.id}
+              onClick={() => handleGroupChange(group)}
+              type="button"
+            >
+              {group.label}
+            </button>
+          ))}
         </div>
+      </section>
+
+      <section className="reports-selector" aria-label="Reportes disponibles">
+        {activeGroup.reports.map((report) => (
+          <button
+            className={
+              activeReport.id === report.id
+                ? "reports-option reports-option--active"
+                : "reports-option"
+            }
+            key={report.id}
+            onClick={() => {
+              setActiveReportId(report.id);
+              setReportData(null);
+            }}
+            type="button"
+          >
+            {report.label}
+          </button>
+        ))}
       </section>
 
       <form className="reports-filters" onSubmit={handleApplyFilters}>
         <label>
           <span>Desde</span>
           <input
-            disabled={activeReport === "inventory"}
+            disabled={!activeReport.usesDates}
             onChange={(event) => setDateFrom(event.target.value)}
             type="date"
             value={dateFrom}
@@ -339,7 +529,7 @@ export function ReportsPage() {
         <label>
           <span>Hasta</span>
           <input
-            disabled={activeReport === "inventory"}
+            disabled={!activeReport.usesDates}
             onChange={(event) => setDateTo(event.target.value)}
             type="date"
             value={dateTo}
@@ -348,7 +538,7 @@ export function ReportsPage() {
         <label>
           <span>Sucursal</span>
           <select onChange={(event) => setBranchId(event.target.value)} value={branchId}>
-            <option value="">Todas</option>
+            <option value="">Todas las sucursales</option>
             {branches.map((branch) => (
               <option key={branch.id} value={branch.id}>
                 {branch.name}
@@ -359,142 +549,70 @@ export function ReportsPage() {
         <Button disabled={isLoading} type="submit">
           Aplicar
         </Button>
-        <Button disabled={isLoading || !activeData} onClick={handleGeneratePdf} type="button" variant="secondary">
+        <Button
+          disabled={isLoading || !reportData}
+          onClick={handleGeneratePdf}
+          type="button"
+          variant="secondary"
+        >
           Generar version PDF
         </Button>
       </form>
 
       {error ? <div className="reports-alert">{error}</div> : null}
 
-      <section className="reports-summary">
-        {activeReport === "sales" ? (
-          <>
-            <article>
-              <span>Ventas</span>
-              <strong>{activeData?.summary?.sales_count || 0}</strong>
-            </article>
-            <article>
-              <span>Subtotal</span>
-              <strong>{formatMoney(activeData?.summary?.subtotal)}</strong>
-            </article>
-            <article>
-              <span>IVA</span>
-              <strong>{formatMoney(activeData?.summary?.tax)}</strong>
-            </article>
-            <article>
-              <span>Total</span>
-              <strong>{formatMoney(activeData?.summary?.total)}</strong>
-            </article>
-          </>
-        ) : null}
-
-        {activeReport === "purchases" ? (
-          <>
-            <article>
-              <span>Compras</span>
-              <strong>{activeData?.summary?.purchases_count || 0}</strong>
-            </article>
-            <article>
-              <span>Total comprado</span>
-              <strong>{formatMoney(activeData?.summary?.total_cost)}</strong>
-            </article>
-          </>
-        ) : null}
-
-        {activeReport === "inventory" ? (
-          <>
-            <article>
-              <span>SKUs</span>
-              <strong>{activeData?.summary?.sku_count || 0}</strong>
-            </article>
-            <article>
-              <span>Unidades</span>
-              <strong>{Number(activeData?.summary?.total_qty || 0).toFixed(2)}</strong>
-            </article>
-            <article>
-              <span>Valor inventario</span>
-              <strong>{formatMoney(activeData?.summary?.inventory_value)}</strong>
-            </article>
-          </>
-        ) : null}
+      <section className="reports-current">
+        <div>
+          <span>Reporte activo</span>
+          <h3>{activeReport.label}</h3>
+        </div>
+        <p>{branchLabel}</p>
       </section>
 
-      <div className="reports-grid">
-        <section className="reports-panel">
-          <div className="reports-panel__header">
-            <h3>Resumen por sucursal</h3>
-            <span>{activeData?.by_branch?.length || 0}</span>
-          </div>
-          <div className="reports-table">
-            {(activeData?.by_branch || []).map((row) => (
-              <article className="reports-table-row" key={row.branch}>
-                <strong>{row.branch_name}</strong>
-                {activeReport === "sales" ? <span>{row.sales_count} ventas</span> : null}
-                {activeReport === "purchases" ? <span>{row.purchases_count} compras</span> : null}
-                {activeReport === "inventory" ? <span>{row.sku_count} SKUs</span> : null}
-                <strong>
-                  {formatMoney(row.total || row.total_cost || row.inventory_value)}
-                </strong>
-              </article>
-            ))}
-            {!isLoading && (activeData?.by_branch || []).length === 0 ? (
-              <div className="reports-empty">Sin datos para estos filtros.</div>
-            ) : null}
-          </div>
-        </section>
+      <section className="reports-summary">
+        {activeReport.summary.map(([label, key, type]) => (
+          <article key={key}>
+            <span>{label}</span>
+            <strong>{valueFor(reportData?.summary, key, type)}</strong>
+          </article>
+        ))}
+      </section>
 
-        <section className="reports-panel reports-panel--detail">
-          <div className="reports-panel__header">
-            <h3>Detalle</h3>
-            <span>{isLoading ? "Cargando..." : `${activeData?.items?.length || 0} filas`}</span>
-          </div>
-          <div className="reports-detail">
-            {activeReport === "sales"
-              ? (activeData?.items || []).map((sale) => (
-                  <article className="reports-detail-row reports-detail-row--sales" key={sale.id}>
-                    <div>
-                      <strong>{sale.branch_name}</strong>
-                      <span>{sale.sold_at ? new Date(sale.sold_at).toLocaleString("es-GT") : "Sin fecha"}</span>
-                    </div>
-                    <span>{sale.payment_method}</span>
-                    <strong>{formatMoney(sale.total)}</strong>
-                  </article>
-                ))
-              : null}
-
-            {activeReport === "purchases"
-              ? (activeData?.items || []).map((purchase) => (
-                  <article className="reports-detail-row reports-detail-row--purchases" key={purchase.id}>
-                    <div>
-                      <strong>{purchase.supplier_name}</strong>
-                      <span>{purchase.invoice_number || purchase.branch_name}</span>
-                    </div>
-                    <span>{purchase.purchased_at ? new Date(purchase.purchased_at).toLocaleString("es-GT") : "Sin fecha"}</span>
-                    <strong>{formatMoney(purchase.total_cost)}</strong>
-                  </article>
-                ))
-              : null}
-
-            {activeReport === "inventory"
-              ? (activeData?.items || []).map((item) => (
-                  <article className="reports-detail-row reports-detail-row--inventory" key={`${item.branch}-${item.product}`}>
-                    <div>
-                      <strong>{item.name}</strong>
-                      <span>{item.sku} · {item.branch_name}</span>
-                    </div>
-                    <span>{Number(item.qty_on_hand || 0).toFixed(2)} unidades</span>
-                    <span>{formatMoney(item.unit_cost)}</span>
-                    <strong>{formatMoney(item.inventory_value)}</strong>
-                  </article>
-                ))
-              : null}
-
-            {!isLoading && (activeData?.items || []).length === 0 ? (
-              <div className="reports-empty">Sin detalle para mostrar.</div>
-            ) : null}
-          </div>
-        </section>
-      </div>
+      <section className="reports-panel reports-panel--detail">
+        <div className="reports-panel__header">
+          <h3>Detalle</h3>
+          <span>{isLoading ? "Cargando..." : `${reportData?.items?.length || 0} filas`}</span>
+        </div>
+        <div className="reports-table-wrap">
+          <table className="reports-data-table">
+            <thead>
+              <tr>
+                {activeReport.columns.map(([label]) => (
+                  <th key={label}>{label}</th>
+                ))}
+              </tr>
+            </thead>
+            <tbody>
+              {(reportData?.items || []).map((row, index) => (
+                <tr
+                  key={row.id || row.product || row.category || row.supplier || row.branch || index}
+                >
+                  {activeReport.columns.map(([label, key, type]) => (
+                    <td key={`${label}-${key}`}>{valueFor(row, key, type)}</td>
+                  ))}
+                </tr>
+              ))}
+              {!isLoading && (reportData?.items || []).length === 0 ? (
+                <tr>
+                  <td colSpan={activeReport.columns.length}>
+                    <div className="reports-empty">Sin datos para estos filtros.</div>
+                  </td>
+                </tr>
+              ) : null}
+            </tbody>
+          </table>
+        </div>
+      </section>
     </div>
   );
 }
