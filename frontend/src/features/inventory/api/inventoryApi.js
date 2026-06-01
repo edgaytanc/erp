@@ -20,6 +20,21 @@ export async function createProduct(payload) {
   return response.data;
 }
 
+export async function listStocks(params = {}) {
+  const response = await api.get("/inventory/stocks/", { params });
+  return response.data;
+}
+
+export async function getStockSummary(params = {}) {
+  const response = await api.get("/inventory/stocks/summary/", { params });
+  return response.data;
+}
+
+export async function listStockMovements(params = {}) {
+  const response = await api.get("/inventory/movements/", { params });
+  return response.data;
+}
+
 export function unwrapResults(data) {
   return Array.isArray(data) ? data : data?.results || [];
 }
