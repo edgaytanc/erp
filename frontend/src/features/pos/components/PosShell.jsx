@@ -4,6 +4,7 @@ import { BranchPanel } from "./BranchPanel";
 import { CancelSaleModal } from "./CancelSaleModal";
 import { CartPanel } from "./CartPanel";
 import { CartTotals } from "./CartTotals";
+import { CashPaymentModal } from "./CashPaymentModal";
 import { PaymentPanel } from "./PaymentPanel";
 import { ProductSearch } from "./ProductSearch";
 import { SaleActions } from "./SaleActions";
@@ -13,6 +14,7 @@ import { TicketPreview } from "./TicketPreview";
 
 export function PosShell({ actions, isProductSearchLoading, searchInputRef, state }) {
   const [isCancelModalOpen, setIsCancelModalOpen] = useState(false);
+  const [isCashPaymentModalOpen, setIsCashPaymentModalOpen] = useState(false);
   const hasOpenCashRegister = Boolean(state.cashRegisterSession);
   const canConfirm = state.cartItems.length > 0 && state.syncStatus !== "syncing" && hasOpenCashRegister;
   const canCancel = state.lastConfirmedSale?.status === "CONFIRMED";
@@ -20,6 +22,20 @@ export function PosShell({ actions, isProductSearchLoading, searchInputRef, stat
   function handleCancelConfirm(reason) {
     actions.cancelSale(reason);
     setIsCancelModalOpen(false);
+  }
+
+  function handleConfirmClick() {
+    if (state.paymentMethod === "CASH") {
+      setIsCashPaymentModalOpen(true);
+      return;
+    }
+
+    actions.confirmSale();
+  }
+
+  function handleCashPaymentConfirm(paymentDetails) {
+    actions.confirmSale(paymentDetails);
+    setIsCashPaymentModalOpen(false);
   }
 
   return (
@@ -66,7 +82,7 @@ export function PosShell({ actions, isProductSearchLoading, searchInputRef, stat
             canConfirm={canConfirm}
             onCancel={() => setIsCancelModalOpen(true)}
             onClear={actions.clearSale}
-            onConfirm={actions.confirmSale}
+            onConfirm={handleConfirmClick}
           />
           <TicketPreview ticket={state.ticketData} />
         </aside>
@@ -76,6 +92,12 @@ export function PosShell({ actions, isProductSearchLoading, searchInputRef, stat
         onClose={() => setIsCancelModalOpen(false)}
         onConfirm={handleCancelConfirm}
         open={isCancelModalOpen}
+      />
+      <CashPaymentModal
+        onClose={() => setIsCashPaymentModalOpen(false)}
+        onConfirm={handleCashPaymentConfirm}
+        open={isCashPaymentModalOpen}
+        total={state.serverTotals.total}
       />
     </div>
   );

@@ -15,8 +15,8 @@ export async function updateSale(saleId, payload) {
   return response.data;
 }
 
-export async function confirmSale(saleId) {
-  const response = await api.post(`/sales/${saleId}/confirm/`, {});
+export async function confirmSale(saleId, payload = {}) {
+  const response = await api.post(`/sales/${saleId}/confirm/`, payload);
   return response.data;
 }
 

@@ -173,7 +173,7 @@ def recompute_totals_for_update(sale: Sale) -> tuple[Decimal, Decimal, Decimal]:
 
 
 @transaction.atomic
-def confirm_sale(sale_id, *, cashier_id) -> Sale:
+def confirm_sale(sale_id, *, cashier_id, cash_received=None) -> Sale:
     sale = (
         Sale.objects.select_for_update()
         .select_related("branch__company")
@@ -198,6 +198,21 @@ def confirm_sale(sale_id, *, cashier_id) -> Sale:
 
     sale.cashier_id = cashier_id
     recompute_totals_for_update(sale)
+    sale.refresh_from_db()
+
+    if sale.payment_method == "CASH":
+        if cash_received is None:
+            raise SaleServiceError("El monto recibido en efectivo es requerido.")
+
+        received = _money(_d(cash_received), _d(get_money_rounding(sale.branch.company)))
+        if received < sale.total:
+            raise SaleServiceError("El monto recibido en efectivo no cubre el total de la venta.")
+
+        sale.cash_received = received
+        sale.cash_change = _money(received - sale.total, _d(get_money_rounding(sale.branch.company)))
+    else:
+        sale.cash_received = None
+        sale.cash_change = None
 
     items = list(sale.items.select_related("product").all())
     if not items:
@@ -218,7 +233,16 @@ def confirm_sale(sale_id, *, cashier_id) -> Sale:
 
     sale.status = SaleStatus.CONFIRMED
     sale.sold_at = sale.sold_at or timezone.now()
-    sale.save(update_fields=["cashier_id", "status", "sold_at", "updated_at"])
+    sale.save(
+        update_fields=[
+            "cashier_id",
+            "cash_received",
+            "cash_change",
+            "status",
+            "sold_at",
+            "updated_at",
+        ]
+    )
     return sale
 
 

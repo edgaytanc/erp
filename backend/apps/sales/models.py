@@ -102,6 +102,20 @@ class Sale(TimeStampedModel):
         validators=[MinValueValidator(Decimal("0.00"))],
         default=Decimal("0.00"),
     )
+    cash_received = models.DecimalField(
+        max_digits=14,
+        decimal_places=2,
+        validators=[MinValueValidator(Decimal("0.00"))],
+        null=True,
+        blank=True,
+    )
+    cash_change = models.DecimalField(
+        max_digits=14,
+        decimal_places=2,
+        validators=[MinValueValidator(Decimal("0.00"))],
+        null=True,
+        blank=True,
+    )
 
     sold_at = models.DateTimeField(null=True, blank=True, db_index=True)
     voided_at = models.DateTimeField(null=True, blank=True, db_index=True)

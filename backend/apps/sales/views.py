@@ -12,6 +12,7 @@ from .serializers import (
     CashRegisterCloseSerializer,
     CashRegisterOpenSerializer,
     CashRegisterSessionSerializer,
+    SaleConfirmSerializer,
     SaleSerializer,
     SaleTicketSerializer,
     SaleVoidSerializer,
@@ -166,9 +167,16 @@ class SaleViewSet(viewsets.ModelViewSet):
 
     @action(detail=True, methods=["post"], url_path="confirm")
     def confirm(self, request, pk=None):
+        serializer = SaleConfirmSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+
         try:
             sale = self.get_object()
-            sale = confirm_sale(sale.pk, cashier_id=request.user.id)
+            sale = confirm_sale(
+                sale.pk,
+                cashier_id=request.user.id,
+                cash_received=serializer.validated_data.get("cash_received"),
+            )
             sale.refresh_from_db()
             return Response(
                 SaleSerializer(sale, context={"request": request}).data,

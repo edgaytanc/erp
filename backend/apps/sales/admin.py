@@ -10,7 +10,17 @@ class SaleItemInline(admin.TabularInline):
 
 @admin.register(Sale)
 class SaleAdmin(admin.ModelAdmin):
-    list_display = ("id", "branch", "cashier_id", "status", "payment_method", "total", "sold_at")
+    list_display = (
+        "id",
+        "branch",
+        "cashier_id",
+        "status",
+        "payment_method",
+        "total",
+        "cash_received",
+        "cash_change",
+        "sold_at",
+    )
     list_filter = ("status", "payment_method", "branch")
     search_fields = ("id",)
     inlines = [SaleItemInline]

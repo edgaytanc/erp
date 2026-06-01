@@ -105,6 +105,8 @@ class SaleSerializer(serializers.ModelSerializer):
             "subtotal",
             "tax",
             "total",
+            "cash_received",
+            "cash_change",
             "sold_at",
             "voided_at",
             "void_reason",
@@ -119,6 +121,8 @@ class SaleSerializer(serializers.ModelSerializer):
             "subtotal",
             "tax",
             "total",
+            "cash_received",
+            "cash_change",
             "sold_at",
             "voided_at",
             "void_reason",
@@ -259,6 +263,16 @@ class SaleVoidSerializer(serializers.Serializer):
     reason = serializers.CharField(required=False, allow_blank=True, max_length=500)
 
 
+class SaleConfirmSerializer(serializers.Serializer):
+    cash_received = serializers.DecimalField(
+        max_digits=14,
+        decimal_places=2,
+        min_value=Decimal("0.00"),
+        required=False,
+        allow_null=True,
+    )
+
+
 class SaleTicketSerializer(serializers.ModelSerializer):
     branch_name = serializers.CharField(source="branch.name", read_only=True)
     company_name = serializers.CharField(source="branch.company.name", read_only=True)
@@ -282,6 +296,8 @@ class SaleTicketSerializer(serializers.ModelSerializer):
             "subtotal",
             "tax",
             "total",
+            "cash_received",
+            "cash_change",
             "branch_name",
             "company_name",
             "company_tax_id",

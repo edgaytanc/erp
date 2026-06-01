@@ -82,7 +82,11 @@ class ReportsApiTestCase(APITestCase):
             },
             format="json",
         )
-        self.client.post(reverse("sales-confirm", args=[sale_response.data["id"]]), {}, format="json")
+        self.client.post(
+            reverse("sales-confirm", args=[sale_response.data["id"]]),
+            {"cash_received": "100.00"},
+            format="json",
+        )
 
         response = self.client.get(reverse("reports-sales"))
 
