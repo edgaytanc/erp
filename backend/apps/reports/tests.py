@@ -10,7 +10,7 @@ from apps.core.models import Branch, Company
 from apps.inventory.models import Category, Product
 from apps.inventory.services import register_purchase_entry
 from apps.purchases.models import Supplier
-from apps.sales.models import SaleStatus
+from apps.sales.services import open_cash_session
 
 
 class ReportsApiTestCase(APITestCase):
@@ -52,6 +52,13 @@ class ReportsApiTestCase(APITestCase):
     def authenticate_admin(self):
         self.client.force_authenticate(user=self.admin_user)
 
+    def open_cash_register(self):
+        return open_cash_session(
+            branch=self.branch,
+            cashier=self.admin_user,
+            opening_amount=Decimal("100.00"),
+        )
+
     def test_reports_are_admin_only(self):
         self.client.force_authenticate(user=self.sales_user)
         response = self.client.get(reverse("reports-sales"))
@@ -59,6 +66,7 @@ class ReportsApiTestCase(APITestCase):
 
     def test_sales_report_returns_confirmed_sales_totals(self):
         self.authenticate_admin()
+        self.open_cash_register()
         sale_response = self.client.post(
             reverse("sales-list"),
             {
@@ -74,7 +82,11 @@ class ReportsApiTestCase(APITestCase):
             },
             format="json",
         )
-        self.client.post(reverse("sales-confirm", args=[sale_response.data["id"]]), {}, format="json")
+        self.client.post(
+            reverse("sales-confirm", args=[sale_response.data["id"]]),
+            {"cash_received": "100.00"},
+            format="json",
+        )
 
         response = self.client.get(reverse("reports-sales"))
 

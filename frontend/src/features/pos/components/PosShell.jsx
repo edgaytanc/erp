@@ -4,6 +4,7 @@ import { BranchPanel } from "./BranchPanel";
 import { CancelSaleModal } from "./CancelSaleModal";
 import { CartPanel } from "./CartPanel";
 import { CartTotals } from "./CartTotals";
+import { CashPaymentModal } from "./CashPaymentModal";
 import { PaymentPanel } from "./PaymentPanel";
 import { ProductSearch } from "./ProductSearch";
 import { SaleActions } from "./SaleActions";
@@ -13,7 +14,9 @@ import { TicketPreview } from "./TicketPreview";
 
 export function PosShell({ actions, isProductSearchLoading, searchInputRef, state }) {
   const [isCancelModalOpen, setIsCancelModalOpen] = useState(false);
-  const canConfirm = state.cartItems.length > 0 && state.syncStatus !== "syncing";
+  const [isCashPaymentModalOpen, setIsCashPaymentModalOpen] = useState(false);
+  const hasOpenCashRegister = Boolean(state.cashRegisterSession);
+  const canConfirm = state.cartItems.length > 0 && state.syncStatus !== "syncing" && hasOpenCashRegister;
   const canCancel = state.lastConfirmedSale?.status === "CONFIRMED";
 
   function handleCancelConfirm(reason) {
@@ -21,16 +24,40 @@ export function PosShell({ actions, isProductSearchLoading, searchInputRef, stat
     setIsCancelModalOpen(false);
   }
 
+  function handleConfirmClick() {
+    if (state.paymentMethod === "CASH") {
+      setIsCashPaymentModalOpen(true);
+      return;
+    }
+
+    actions.confirmSale();
+  }
+
+  function handleCashPaymentConfirm(paymentDetails) {
+    actions.confirmSale(paymentDetails);
+    setIsCashPaymentModalOpen(false);
+  }
+
   return (
     <div className="pos-shell">
       <SaleStatusBar cartCount={state.cartItems.length} draftSaleId={state.draftSaleId} status={state.syncStatus} />
+      <section className={hasOpenCashRegister ? "pos-cash-status pos-cash-status--open" : "pos-cash-status"}>
+        <strong>{hasOpenCashRegister ? "Caja abierta" : "Caja cerrada"}</strong>
+        <span>
+          {state.isCashRegisterLoading
+            ? "Validando caja..."
+            : hasOpenCashRegister
+              ? `Apertura Q ${Number(state.cashRegisterSession.opening_amount || 0).toFixed(2)}`
+              : "Abre caja desde el dashboard POS antes de vender."}
+        </span>
+      </section>
       <SaleErrorBanner message={state.lastError} />
 
       <div className="pos-shell__grid">
         <div className="pos-shell__left">
           <BranchPanel branchId={state.branchId} branchName={state.branchName} />
           <ProductSearch
-            disabled={!state.branchId || Boolean(state.lastConfirmedSale)}
+            disabled={!state.branchId || Boolean(state.lastConfirmedSale) || !hasOpenCashRegister}
             inputRef={searchInputRef}
             isLoading={isProductSearchLoading}
             onAddProduct={actions.addProduct}
@@ -55,7 +82,7 @@ export function PosShell({ actions, isProductSearchLoading, searchInputRef, stat
             canConfirm={canConfirm}
             onCancel={() => setIsCancelModalOpen(true)}
             onClear={actions.clearSale}
-            onConfirm={actions.confirmSale}
+            onConfirm={handleConfirmClick}
           />
           <TicketPreview ticket={state.ticketData} />
         </aside>
@@ -65,6 +92,12 @@ export function PosShell({ actions, isProductSearchLoading, searchInputRef, stat
         onClose={() => setIsCancelModalOpen(false)}
         onConfirm={handleCancelConfirm}
         open={isCancelModalOpen}
+      />
+      <CashPaymentModal
+        onClose={() => setIsCashPaymentModalOpen(false)}
+        onConfirm={handleCashPaymentConfirm}
+        open={isCashPaymentModalOpen}
+        total={state.serverTotals.total}
       />
     </div>
   );

@@ -69,6 +69,32 @@ class InventoryAPITestCase(APITestCase):
         self.assertEqual(response.data["count"], 1)
         self.assertEqual(response.data["results"][0]["sku"], "FRIJOL-001")
 
+    def test_product_can_be_updated(self):
+        new_category = Category.objects.create(name="Bebidas")
+
+        response = self.client.patch(
+            reverse("inventory-products-detail", args=[self.product.id]),
+            {
+                "category": str(new_category.id),
+                "sale_price": "15.50",
+                "cost_price": "8.25",
+            },
+            format="json",
+        )
+
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.product.refresh_from_db()
+        self.assertEqual(self.product.category, new_category)
+        self.assertEqual(self.product.sale_price, Decimal("15.50"))
+        self.assertEqual(self.product.cost_price, Decimal("8.25"))
+
+    def test_product_delete_deactivates_without_removing(self):
+        response = self.client.delete(reverse("inventory-products-detail", args=[self.product.id]))
+
+        self.assertEqual(response.status_code, status.HTTP_204_NO_CONTENT)
+        self.product.refresh_from_db()
+        self.assertFalse(self.product.is_active)
+
     def test_sales_role_can_read_inventory_for_pos(self):
         self.client.force_authenticate(user=self.sales_user)
 

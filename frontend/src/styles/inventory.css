@@ -113,7 +113,8 @@
 }
 
 .inventory-category-form .btn,
-.inventory-product-form .btn {
+.inventory-product-form .btn,
+.inventory-row-actions .btn {
   border-radius: 0.5rem;
 }
 
@@ -143,6 +144,13 @@
   height: 1rem;
 }
 
+.inventory-form-actions {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, auto));
+  gap: 0.6rem;
+  justify-content: start;
+}
+
 .inventory-product-list {
   display: grid;
   padding: 1rem;
@@ -150,7 +158,7 @@
 
 .inventory-product-row {
   display: grid;
-  grid-template-columns: minmax(180px, 1.2fr) minmax(140px, 1fr) 140px auto;
+  grid-template-columns: minmax(180px, 1.2fr) minmax(140px, 1fr) 140px auto auto;
   gap: 1rem;
   align-items: center;
   min-height: 4.5rem;
@@ -185,6 +193,18 @@
   color: #166534;
 }
 
+.inventory-row-actions {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: 0.5rem;
+}
+
+.inventory-row-actions .btn {
+  min-height: 2.4rem;
+  padding: 0.45rem 0.7rem;
+}
+
 .inventory-empty {
   display: grid;
   place-items: center;
@@ -214,11 +234,14 @@
 
   .inventory-form-row,
   .inventory-form-row--three,
-  .inventory-category-form {
+  .inventory-category-form,
+  .inventory-form-actions {
     grid-template-columns: 1fr;
   }
 
-  .inventory-badge {
+  .inventory-badge,
+  .inventory-row-actions {
     justify-self: start;
+    justify-content: flex-start;
   }
 }

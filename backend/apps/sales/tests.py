@@ -12,6 +12,7 @@ from apps.core.models import Branch, Company
 from apps.inventory.models import Category, Product, ReferenceType, Stock, StockMovement
 from apps.inventory.services import register_purchase_entry
 from apps.sales.models import Sale, SaleStatus
+from apps.sales.services import open_cash_session
 
 
 class SalesApiIntegrationTestCase(APITestCase):
@@ -98,6 +99,13 @@ class SalesApiIntegrationTestCase(APITestCase):
     def authenticate_purchases(self):
         self.client.force_authenticate(user=self.purchases_user)
 
+    def open_cash_register(self):
+        return open_cash_session(
+            branch=self.branch,
+            cashier=self.sales_user,
+            opening_amount=Decimal("100.00"),
+        )
+
     def sale_payload(self):
         return {
             "branch": str(self.branch.id),
@@ -181,12 +189,17 @@ class SalesApiIntegrationTestCase(APITestCase):
 
     def test_confirm_sale_impacts_inventory(self):
         self.authenticate_sales()
+        self.open_cash_register()
         create_response = self.client.post(reverse("sales-list"), self.sale_payload(), format="json")
         sale_id = create_response.data["id"]
 
-        confirm_response = self.client.post(reverse("sales-confirm", args=[sale_id]), {}, format="json")
+        confirm_response = self.client.post(
+            reverse("sales-confirm", args=[sale_id]), {"cash_received": "100.00"}, format="json"
+        )
         self.assertEqual(confirm_response.status_code, status.HTTP_200_OK)
         self.assertEqual(confirm_response.data["status"], SaleStatus.CONFIRMED)
+        self.assertEqual(confirm_response.data["cash_received"], "100.00")
+        self.assertEqual(confirm_response.data["cash_change"], "32.00")
         self.assertIsNotNone(confirm_response.data["sold_at"])
 
         stock_product_1 = Stock.objects.get(branch=self.branch, product=self.product)
@@ -199,12 +212,46 @@ class SalesApiIntegrationTestCase(APITestCase):
             2,
         )
 
-    def test_confirm_sale_is_idempotent(self):
+    def test_confirm_sale_requires_open_cash_register(self):
         self.authenticate_sales()
         create_response = self.client.post(reverse("sales-list"), self.sale_payload(), format="json")
         sale_id = create_response.data["id"]
 
-        first_confirm = self.client.post(reverse("sales-confirm", args=[sale_id]), {}, format="json")
+        response = self.client.post(reverse("sales-confirm", args=[sale_id]), {}, format="json")
+        self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
+        self.assertIn("abrir caja", response.data["detail"].lower())
+
+    def test_confirm_cash_sale_requires_received_amount(self):
+        self.authenticate_sales()
+        self.open_cash_register()
+        create_response = self.client.post(reverse("sales-list"), self.sale_payload(), format="json")
+        sale_id = create_response.data["id"]
+
+        response = self.client.post(reverse("sales-confirm", args=[sale_id]), {}, format="json")
+        self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
+        self.assertIn("monto recibido", response.data["detail"].lower())
+
+    def test_confirm_cash_sale_rejects_insufficient_received_amount(self):
+        self.authenticate_sales()
+        self.open_cash_register()
+        create_response = self.client.post(reverse("sales-list"), self.sale_payload(), format="json")
+        sale_id = create_response.data["id"]
+
+        response = self.client.post(
+            reverse("sales-confirm", args=[sale_id]), {"cash_received": "10.00"}, format="json"
+        )
+        self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
+        self.assertIn("no cubre el total", response.data["detail"].lower())
+
+    def test_confirm_sale_is_idempotent(self):
+        self.authenticate_sales()
+        self.open_cash_register()
+        create_response = self.client.post(reverse("sales-list"), self.sale_payload(), format="json")
+        sale_id = create_response.data["id"]
+
+        first_confirm = self.client.post(
+            reverse("sales-confirm", args=[sale_id]), {"cash_received": "100.00"}, format="json"
+        )
         second_confirm = self.client.post(reverse("sales-confirm", args=[sale_id]), {}, format="json")
 
         self.assertEqual(first_confirm.status_code, status.HTTP_200_OK)
@@ -217,20 +264,24 @@ class SalesApiIntegrationTestCase(APITestCase):
 
     def test_confirm_sale_rejects_insufficient_stock(self):
         self.authenticate_sales()
+        self.open_cash_register()
         payload = self.sale_payload()
         payload["items"][0]["qty"] = "99.000"
         create_response = self.client.post(reverse("sales-list"), payload, format="json")
         sale_id = create_response.data["id"]
 
-        response = self.client.post(reverse("sales-confirm", args=[sale_id]), {}, format="json")
+        response = self.client.post(
+            reverse("sales-confirm", args=[sale_id]), {"cash_received": "3000.00"}, format="json"
+        )
         self.assertEqual(response.status_code, status.HTTP_409_CONFLICT)
         self.assertIn("stock insuficiente", response.data["detail"].lower())
 
     def test_cannot_edit_confirmed_sale(self):
         self.authenticate_sales()
+        self.open_cash_register()
         create_response = self.client.post(reverse("sales-list"), self.sale_payload(), format="json")
         sale_id = create_response.data["id"]
-        self.client.post(reverse("sales-confirm", args=[sale_id]), {}, format="json")
+        self.client.post(reverse("sales-confirm", args=[sale_id]), {"cash_received": "100.00"}, format="json")
 
         response = self.client.patch(
             reverse("sales-detail", args=[sale_id]),
@@ -242,9 +293,10 @@ class SalesApiIntegrationTestCase(APITestCase):
 
     def test_void_sale_reverts_stock(self):
         self.authenticate_sales()
+        self.open_cash_register()
         create_response = self.client.post(reverse("sales-list"), self.sale_payload(), format="json")
         sale_id = create_response.data["id"]
-        self.client.post(reverse("sales-confirm", args=[sale_id]), {}, format="json")
+        self.client.post(reverse("sales-confirm", args=[sale_id]), {"cash_received": "100.00"}, format="json")
 
         response = self.client.post(
             reverse("sales-void", args=[sale_id]),
@@ -267,9 +319,10 @@ class SalesApiIntegrationTestCase(APITestCase):
 
     def test_void_sale_is_idempotent(self):
         self.authenticate_sales()
+        self.open_cash_register()
         create_response = self.client.post(reverse("sales-list"), self.sale_payload(), format="json")
         sale_id = create_response.data["id"]
-        self.client.post(reverse("sales-confirm", args=[sale_id]), {}, format="json")
+        self.client.post(reverse("sales-confirm", args=[sale_id]), {"cash_received": "100.00"}, format="json")
 
         first_void = self.client.post(reverse("sales-void", args=[sale_id]), {"reason": "x"}, format="json")
         second_void = self.client.post(reverse("sales-void", args=[sale_id]), {"reason": "y"}, format="json")
@@ -283,9 +336,10 @@ class SalesApiIntegrationTestCase(APITestCase):
 
     def test_sales_role_cannot_void_after_window(self):
         self.authenticate_sales()
+        self.open_cash_register()
         create_response = self.client.post(reverse("sales-list"), self.sale_payload(), format="json")
         sale_id = create_response.data["id"]
-        self.client.post(reverse("sales-confirm", args=[sale_id]), {}, format="json")
+        self.client.post(reverse("sales-confirm", args=[sale_id]), {"cash_received": "100.00"}, format="json")
 
         sale = Sale.objects.get(pk=sale_id)
         sale.sold_at = timezone.now() - timedelta(minutes=30)
@@ -297,9 +351,10 @@ class SalesApiIntegrationTestCase(APITestCase):
 
     def test_admin_can_void_after_window(self):
         self.authenticate_sales()
+        self.open_cash_register()
         create_response = self.client.post(reverse("sales-list"), self.sale_payload(), format="json")
         sale_id = create_response.data["id"]
-        self.client.post(reverse("sales-confirm", args=[sale_id]), {}, format="json")
+        self.client.post(reverse("sales-confirm", args=[sale_id]), {"cash_received": "100.00"}, format="json")
 
         sale = Sale.objects.get(pk=sale_id)
         sale.sold_at = timezone.now() - timedelta(minutes=30)
@@ -312,9 +367,10 @@ class SalesApiIntegrationTestCase(APITestCase):
 
     def test_ticket_endpoint_returns_company_and_items(self):
         self.authenticate_sales()
+        self.open_cash_register()
         create_response = self.client.post(reverse("sales-list"), self.sale_payload(), format="json")
         sale_id = create_response.data["id"]
-        self.client.post(reverse("sales-confirm", args=[sale_id]), {}, format="json")
+        self.client.post(reverse("sales-confirm", args=[sale_id]), {"cash_received": "100.00"}, format="json")
 
         response = self.client.get(reverse("sales-ticket", args=[sale_id]))
         self.assertEqual(response.status_code, status.HTTP_200_OK)

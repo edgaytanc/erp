@@ -6,7 +6,7 @@ import { POS_ACTIONS } from "../state/posActions";
 import { getPosErrorMessage } from "../utils/posErrors";
 
 export function useSaleActions({ state, dispatch, syncDraftNow }) {
-  const confirmSale = useCallback(async () => {
+  const confirmSale = useCallback(async (paymentDetails = {}) => {
     if (state.cartItems.length === 0) {
       dispatch({
         type: POS_ACTIONS.SET_ERROR,
@@ -23,6 +23,14 @@ export function useSaleActions({ state, dispatch, syncDraftNow }) {
       return;
     }
 
+    if (!state.cashRegisterSession) {
+      dispatch({
+        type: POS_ACTIONS.SET_ERROR,
+        payload: "Debes abrir caja antes de confirmar ventas.",
+      });
+      return;
+    }
+
     dispatch({ type: POS_ACTIONS.SET_SYNC_STATUS, payload: "syncing" });
 
     try {
@@ -33,7 +41,11 @@ export function useSaleActions({ state, dispatch, syncDraftNow }) {
         return;
       }
 
-      const confirmedSale = await confirmSaleRequest(saleId);
+      const confirmPayload =
+        state.paymentMethod === "CASH"
+          ? { cash_received: paymentDetails.cashReceived }
+          : {};
+      const confirmedSale = await confirmSaleRequest(saleId, confirmPayload);
       const ticket = await getSaleTicket(saleId);
 
       dispatch({ type: POS_ACTIONS.SET_CONFIRMED_SALE, payload: confirmedSale });
@@ -42,7 +54,15 @@ export function useSaleActions({ state, dispatch, syncDraftNow }) {
     } catch (error) {
       dispatch({ type: POS_ACTIONS.SET_ERROR, payload: getPosErrorMessage(error) });
     }
-  }, [dispatch, state.branchId, state.cartItems, state.draftSaleId, syncDraftNow]);
+  }, [
+    dispatch,
+    state.branchId,
+    state.cartItems,
+    state.cashRegisterSession,
+    state.draftSaleId,
+    state.paymentMethod,
+    syncDraftNow,
+  ]);
 
   const clearSale = useCallback(() => {
     dispatch({ type: POS_ACTIONS.RESET });

@@ -5,6 +5,7 @@ import { useSaleActions } from "./useSaleActions";
 import { useSaleDraft } from "./useSaleDraft";
 import { usePosKeyboard } from "./usePosKeyboard";
 import { useAuth } from "../../../contexts/AuthContext";
+import { getCurrentCashRegister } from "../api/salesApi";
 import { POS_ACTIONS } from "../state/posActions";
 import { posInitialState } from "../state/posInitialState";
 import { posReducer } from "../state/posReducer";
@@ -26,6 +27,49 @@ export function usePos() {
       },
     });
   }, [user?.branch, user?.branch_name]);
+
+  useEffect(() => {
+    let isActive = true;
+
+    async function loadCashRegister() {
+      dispatch({
+        type: POS_ACTIONS.SET_CASH_REGISTER,
+        payload: { session: null, isLoading: true },
+      });
+
+      try {
+        const response = await getCurrentCashRegister();
+        if (!isActive) return;
+        dispatch({
+          type: POS_ACTIONS.SET_CASH_REGISTER,
+          payload: { session: response.session, isLoading: false },
+        });
+      } catch (error) {
+        if (!isActive) return;
+        dispatch({
+          type: POS_ACTIONS.SET_CASH_REGISTER,
+          payload: { session: null, isLoading: false },
+        });
+        dispatch({
+          type: POS_ACTIONS.SET_ERROR,
+          payload: "No se pudo validar si la caja esta abierta.",
+        });
+      }
+    }
+
+    if (user?.branch) {
+      loadCashRegister();
+    } else {
+      dispatch({
+        type: POS_ACTIONS.SET_CASH_REGISTER,
+        payload: { session: null, isLoading: false },
+      });
+    }
+
+    return () => {
+      isActive = false;
+    };
+  }, [user?.branch]);
 
   useEffect(() => {
     dispatch({ type: POS_ACTIONS.SET_RESULTS, payload: productSearch.results });
@@ -64,6 +108,14 @@ export function usePos() {
         return;
       }
 
+      if (!state.cashRegisterSession) {
+        dispatch({
+          type: POS_ACTIONS.SET_ERROR,
+          payload: "Debes abrir caja antes de agregar productos.",
+        });
+        return;
+      }
+
       if (product.stock !== null && product.stock <= 0) {
         dispatch({
           type: POS_ACTIONS.SET_ERROR,
@@ -96,7 +148,7 @@ export function usePos() {
       dispatch({ type: POS_ACTIONS.SET_SEARCH_TERM, payload: "" });
       focusSearch();
     },
-    [focusSearch, state.cartItems, state.lastConfirmedSale],
+    [focusSearch, state.cartItems, state.cashRegisterSession, state.lastConfirmedSale],
   );
 
   const updateQuantity = useCallback(

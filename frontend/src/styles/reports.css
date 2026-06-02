@@ -4,7 +4,9 @@
 }
 
 .reports-toolbar,
+.reports-selector,
 .reports-filters,
+.reports-current,
 .reports-panel,
 .reports-summary article {
   border: 1px solid #dfe8f4;
@@ -52,9 +54,33 @@
   color: #1d4ed8;
 }
 
+.reports-selector {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.6rem;
+  padding: 0.75rem;
+}
+
+.reports-option {
+  min-height: 2.5rem;
+  border: 1px solid #cbd5e1;
+  border-radius: 999px;
+  background: #ffffff;
+  color: #334155;
+  cursor: pointer;
+  font-weight: 800;
+  padding: 0 1rem;
+}
+
+.reports-option--active {
+  border-color: #2563eb;
+  background: #2563eb;
+  color: #ffffff;
+}
+
 .reports-filters {
   display: grid;
-  grid-template-columns: repeat(3, minmax(0, 1fr)) auto auto;
+  grid-template-columns: repeat(auto-fit, minmax(12rem, 1fr));
   gap: 0.75rem;
   align-items: end;
   padding: 1rem;
@@ -89,6 +115,33 @@
   background: #fef2f2;
   color: #991b1b;
   font-weight: 700;
+}
+
+.reports-current {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+  padding: 1rem;
+}
+
+.reports-current span {
+  color: #2563eb;
+  font-size: 0.78rem;
+  font-weight: 900;
+  text-transform: uppercase;
+}
+
+.reports-current h3 {
+  margin: 0.15rem 0 0;
+  color: #0f172a;
+  font-size: 1.25rem;
+}
+
+.reports-current p {
+  margin: 0;
+  color: #607089;
+  font-weight: 800;
 }
 
 .reports-summary {
@@ -180,6 +233,41 @@
   color: #64748b;
 }
 
+.reports-table-wrap {
+  overflow-x: auto;
+}
+
+.reports-data-table {
+  width: 100%;
+  min-width: 760px;
+  border-collapse: collapse;
+}
+
+.reports-data-table th,
+.reports-data-table td {
+  border-bottom: 1px solid #e5edf7;
+  padding: 0.85rem;
+  text-align: left;
+  vertical-align: top;
+  white-space: nowrap;
+}
+
+.reports-data-table th {
+  background: #f8fafc;
+  color: #64748b;
+  font-size: 0.8rem;
+  text-transform: uppercase;
+}
+
+.reports-data-table td {
+  color: #142033;
+}
+
+.reports-data-table td:last-child,
+.reports-data-table th:last-child {
+  text-align: right;
+}
+
 @media (max-width: 1120px) {
   .reports-grid,
   .reports-summary {
@@ -190,6 +278,7 @@
 @media (max-width: 760px) {
   .reports-toolbar,
   .reports-filters,
+  .reports-current,
   .reports-grid,
   .reports-summary,
   .reports-table-row,
@@ -202,6 +291,21 @@
   .reports-toolbar {
     flex-direction: column;
     align-items: stretch;
+  }
+
+  .reports-current {
+    align-items: flex-start;
+  }
+
+  .reports-tabs,
+  .reports-selector {
+    overflow-x: auto;
+    flex-wrap: nowrap;
+  }
+
+  .reports-tab,
+  .reports-option {
+    flex: 0 0 auto;
   }
 }
 
