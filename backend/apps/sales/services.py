@@ -74,22 +74,37 @@ def open_cash_session(*, branch, cashier, opening_amount) -> CashRegisterSession
     if opening_amount is None or _d(opening_amount) < 0:
         raise SaleServiceError("El monto de apertura debe ser mayor o igual a cero.")
 
-    business_date = timezone.localdate()
+    # Verificar si ya existe una caja abierta en la sucursal por CUALQUIER usuario
     existing_open = (
         CashRegisterSession.objects.select_for_update()
-        .filter(branch=branch, cashier=cashier, status=CashRegisterStatus.OPEN)
+        .filter(branch=branch, status=CashRegisterStatus.OPEN)
         .first()
     )
     if existing_open:
-        return existing_open
+        # Si pertenece al mismo cajero, se devuelve para continuar la sesión (reapertura/resumen)
+        if existing_open.cashier_id == cashier.id:
+            return existing_open
+        # Si pertenece a otro cajero, bloquear la apertura
+        else:
+            raise SaleServiceError(
+                f"La caja ya está abierta en esta sucursal por el usuario {existing_open.cashier.username}."
+            )
 
-    existing_today = (
-        CashRegisterSession.objects.select_for_update()
-        .filter(branch=branch, cashier=cashier, business_date=business_date)
-        .first()
-    )
-    if existing_today:
-        raise SaleServiceError("La caja diaria ya fue cerrada para este cajero y sucursal.")
+    # Validar límite diario de aperturas
+    business_date = timezone.localdate()
+    total_today = CashRegisterSession.objects.filter(
+        branch=branch,
+        cashier=cashier,
+        business_date=business_date
+    ).count()
+
+    company_settings = getattr(branch.company, "settings", None)
+    max_sessions = getattr(company_settings, "max_cash_sessions_per_day", 1) if company_settings else 1
+
+    if total_today >= max_sessions:
+        raise SaleServiceError(
+            f"Se ha alcanzado el límite diario de aperturas de caja ({max_sessions} por día)."
+        )
 
     return CashRegisterSession.objects.create(
         branch=branch,
@@ -105,13 +120,18 @@ def close_cash_session(*, branch, cashier, closing_amount) -> CashRegisterSessio
     if closing_amount is None or _d(closing_amount) < 0:
         raise SaleServiceError("El monto de cierre debe ser mayor o igual a cero.")
 
+    # Buscar cualquier caja abierta en la sucursal
     session = (
         CashRegisterSession.objects.select_for_update()
-        .filter(branch=branch, cashier=cashier, status=CashRegisterStatus.OPEN)
+        .filter(branch=branch, status=CashRegisterStatus.OPEN)
         .first()
     )
     if not session:
-        raise SaleServiceError("No hay una caja abierta para cerrar.")
+        raise SaleServiceError("No hay una caja abierta para cerrar en esta sucursal.")
+
+    # Si pertenece a otro cajero y el usuario actual no es admin, se bloquea por permisos
+    if session.cashier_id != cashier.id and not _is_admin(cashier):
+        raise SaleServiceError("La caja está abierta por otro usuario y no tienes permisos para cerrarla.")
 
     session.closing_amount = _d(closing_amount)
     session.status = CashRegisterStatus.CLOSED

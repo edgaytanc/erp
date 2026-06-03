@@ -55,6 +55,12 @@ class CompanySettings(TimeStampedModel):
         help_text="Minutos para que Sales pueda anular una venta confirmada. 0 = no puede anular.",
     )
 
+    max_cash_sessions_per_day = models.PositiveIntegerField(
+        default=1,
+        validators=[MinValueValidator(1)],
+        help_text="Número máximo de aperturas/cierres de caja por día.",
+    )
+
     is_active = models.BooleanField(default=True, db_index=True)
 
     class Meta:

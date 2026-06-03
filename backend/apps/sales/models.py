@@ -59,12 +59,6 @@ class CashRegisterSession(TimeStampedModel):
             models.Index(fields=["cashier", "business_date"], name="ix_cash_cashier_date"),
             models.Index(fields=["status", "opened_at"], name="ix_cash_status_opened"),
         ]
-        constraints = [
-            models.UniqueConstraint(
-                fields=["branch", "cashier", "business_date"],
-                name="uq_cash_session_daily_cashier",
-            ),
-        ]
 
     def __str__(self) -> str:
         return f"Caja {self.branch_id} - {self.cashier_id} - {self.business_date}"

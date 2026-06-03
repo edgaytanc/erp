@@ -35,6 +35,7 @@ const emptySettingsForm = {
   tax_rate: "0.1200",
   money_rounding: "0.0100",
   sale_void_window_minutes: 10,
+  max_cash_sessions_per_day: 1,
   is_active: true,
 };
 
@@ -83,6 +84,7 @@ function toSettingsForm(settings) {
         tax_rate: settings.tax_rate || "0.1200",
         money_rounding: settings.money_rounding || "0.0100",
         sale_void_window_minutes: settings.sale_void_window_minutes ?? 10,
+        max_cash_sessions_per_day: settings.max_cash_sessions_per_day ?? 1,
         is_active: Boolean(settings.is_active),
       }
     : emptySettingsForm;
@@ -194,6 +196,7 @@ export function AdminConfigPage() {
         ...settingsForm,
         company: company.id,
         sale_void_window_minutes: Number(settingsForm.sale_void_window_minutes || 0),
+        max_cash_sessions_per_day: Number(settingsForm.max_cash_sessions_per_day || 1),
       };
 
       if (selectedSettings) {
@@ -462,6 +465,17 @@ export function AdminConfigPage() {
                   onChange={(event) => updateSettingsField("sale_void_window_minutes", event.target.value)}
                   type="number"
                   value={settingsForm.sale_void_window_minutes}
+                />
+              </label>
+            </div>
+            <div className="admin-form-row">
+              <label>
+                <span>Límite de aperturas/cierres de caja por día</span>
+                <input
+                  min="1"
+                  onChange={(event) => updateSettingsField("max_cash_sessions_per_day", event.target.value)}
+                  type="number"
+                  value={settingsForm.max_cash_sessions_per_day}
                 />
               </label>
             </div>

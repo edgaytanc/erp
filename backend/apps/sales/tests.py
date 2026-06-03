@@ -378,3 +378,95 @@ class SalesApiIntegrationTestCase(APITestCase):
         self.assertEqual(response.data["branch_name"], "Central")
         self.assertEqual(len(response.data["items"]), 2)
         self.assertEqual(response.data["receipt_footer"], "Vuelva pronto")
+
+    def test_only_one_active_cash_register_per_branch(self):
+        # Sales user opens cash session
+        self.authenticate_sales()
+        self.open_cash_register()
+
+        # Create another user in the same branch
+        other_user = self.user_model.objects.create_user(
+            username="seller2",
+            password="seller2password",
+            role="sales",
+            branch=self.branch,
+        )
+        self.client.force_authenticate(user=other_user)
+
+        # Other user tries to open box, should fail
+        response = self.client.post(
+            reverse("cash-register-open"),
+            {"opening_amount": "150.00"},
+            format="json",
+        )
+        self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
+        self.assertIn("ya está abierta", response.data["detail"])
+
+    def test_admin_can_close_another_cashier_register(self):
+        # Sales user opens cash session
+        self.authenticate_sales()
+        session = self.open_cash_register()
+
+        # Admin user tries to close session
+        self.authenticate_admin()
+        self.admin_user.branch = self.branch
+        self.admin_user.save()
+
+        response = self.client.post(
+            reverse("cash-register-close"),
+            {"closing_amount": "120.00"},
+            format="json",
+        )
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        session.refresh_from_db()
+        self.assertEqual(session.status, "CLOSED")
+        self.assertEqual(session.closing_amount, Decimal("120.00"))
+
+    def test_daily_opening_limits_configured_correctly(self):
+        # Get settings and change limit to 2
+        settings = self.company.settings
+        settings.max_cash_sessions_per_day = 2
+        settings.save()
+
+        self.authenticate_sales()
+
+        # First opening -> Success
+        response = self.client.post(
+            reverse("cash-register-open"),
+            {"opening_amount": "100.00"},
+            format="json",
+        )
+        self.assertEqual(response.status_code, status.HTTP_201_CREATED)
+
+        # First closing -> Success
+        response = self.client.post(
+            reverse("cash-register-close"),
+            {"closing_amount": "120.00"},
+            format="json",
+        )
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+
+        # Second opening -> Success
+        response = self.client.post(
+            reverse("cash-register-open"),
+            {"opening_amount": "100.00"},
+            format="json",
+        )
+        self.assertEqual(response.status_code, status.HTTP_201_CREATED)
+
+        # Second closing -> Success
+        response = self.client.post(
+            reverse("cash-register-close"),
+            {"closing_amount": "150.00"},
+            format="json",
+        )
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+
+        # Third opening -> Fails due to limit of 2
+        response = self.client.post(
+            reverse("cash-register-open"),
+            {"opening_amount": "100.00"},
+            format="json",
+        )
+        self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
+        self.assertIn("límite diario de aperturas", response.data["detail"])
