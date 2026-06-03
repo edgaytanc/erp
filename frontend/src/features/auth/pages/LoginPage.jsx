@@ -114,7 +114,7 @@ export function LoginPage() {
 
         <div className="auth-card__intro">
           {/* <h1 id="login-title">Ingreso al ERP</h1> */}
-          <p>Accede para gestionar inventario, compras, ventas POS y reportes.</p>
+          <p>Inventario, Compras, Ventas POS y Reportes.</p>
         </div>
 
         <form className="auth-form" onSubmit={handleSubmit}>

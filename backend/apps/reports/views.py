@@ -843,3 +843,211 @@ class InventoryMovementsReportView(AdminReportView):
                 "items": items,
             }
         )
+
+
+class DailyUtilityReportView(AdminReportView):
+    def get(self, request):
+        date_from, date_to = self.get_date_range(request)
+        qs = SaleItem.objects.select_related(
+            "sale", "sale__branch", "product"
+        ).filter(sale__status=SaleStatus.CONFIRMED)
+        qs = self.apply_date_filter(qs, "sale__sold_at", date_from, date_to)
+        qs = self.apply_branch_filter(qs, "sale__branch")
+
+        from django.db.models.functions import TruncDate
+
+        cost_expression = ExpressionWrapper(
+            F("qty") * F("product__cost_price"),
+            output_field=DecimalField(max_digits=18, decimal_places=2),
+        )
+
+        daily_stats = (
+            qs.annotate(date=TruncDate("sale__sold_at"))
+            .values("date")
+            .annotate(
+                sales_count=Count("sale", distinct=True),
+                total_revenue=Sum("subtotal"),
+                total_cost=Sum(cost_expression),
+            )
+            .order_by("-date")
+        )
+
+        totals = qs.aggregate(
+            sales_count=Count("sale", distinct=True),
+            total_revenue=Coalesce(Sum("subtotal"), Value(ZERO), output_field=DecimalField()),
+            total_cost=Coalesce(Sum(cost_expression), Value(ZERO), output_field=DecimalField()),
+        )
+
+        summary_sales_count = totals["sales_count"] or 0
+        summary_revenue = totals["total_revenue"] or ZERO
+        summary_cost = totals["total_cost"] or ZERO
+        summary_utility = summary_revenue - summary_cost
+
+        items = []
+        for row in daily_stats:
+            date_val = row["date"]
+            date_str = date_val.isoformat() if date_val else "Sin fecha"
+            rev = row["total_revenue"] or ZERO
+            cost = row["total_cost"] or ZERO
+            utility = rev - cost
+            items.append({
+                "date": date_str,
+                "sales_count": row["sales_count"],
+                "total_revenue": self.money(rev),
+                "total_cost": self.money(cost),
+                "utility": self.money(utility),
+            })
+
+        return Response(
+            {
+                "filters": {"date_from": date_from, "date_to": date_to},
+                "scope": self.branch_scope(request),
+                "generated_at": timezone.now().isoformat(),
+                "summary": {
+                    "sales_count": summary_sales_count,
+                    "total_revenue": self.money(summary_revenue),
+                    "total_cost": self.money(summary_cost),
+                    "utility": self.money(summary_utility),
+                },
+                "items": items,
+            }
+        )
+
+
+class TopSellingProductsReportView(AdminReportView):
+    def get(self, request):
+        date_from, date_to = self.get_date_range(request)
+
+        limit = request.query_params.get("limit")
+        try:
+            limit = int(limit)
+            if limit <= 0:
+                limit = 10
+        except (TypeError, ValueError):
+            limit = 10
+
+        qs = SaleItem.objects.select_related(
+            "sale", "sale__branch", "product", "product__category"
+        ).filter(sale__status=SaleStatus.CONFIRMED)
+        qs = self.apply_date_filter(qs, "sale__sold_at", date_from, date_to)
+        qs = self.apply_branch_filter(qs, "sale__branch")
+
+        totals = qs.aggregate(
+            products_count=Count("product", distinct=True),
+            units_sold=Coalesce(Sum("qty"), Value(ZERO), output_field=DecimalField()),
+            total_revenue=Coalesce(Sum("subtotal"), Value(ZERO), output_field=DecimalField()),
+        )
+
+        rows = (
+            qs.values(
+                "product_id",
+                "product__sku",
+                "product__name",
+                "product__category__name",
+            )
+            .annotate(
+                sales_count=Count("sale", distinct=True),
+                units_sold=Coalesce(
+                    Sum("qty"), Value(ZERO), output_field=DecimalField()
+                ),
+                total_revenue=Coalesce(
+                    Sum("subtotal"), Value(ZERO), output_field=DecimalField()
+                ),
+            )
+            .order_by("-units_sold", "product__name")[:limit]
+        )
+
+        items = [
+            {
+                "product": str(row["product_id"]),
+                "sku": row["product__sku"],
+                "name": row["product__name"],
+                "category_name": row["product__category__name"] or "Sin categoria",
+                "sales_count": row["sales_count"],
+                "units_sold": self.money(row["units_sold"]),
+                "total_revenue": self.money(row["total_revenue"]),
+            }
+            for row in rows
+        ]
+
+        return Response(
+            {
+                "filters": {"date_from": date_from, "date_to": date_to, "limit": limit},
+                "scope": self.branch_scope(request),
+                "generated_at": timezone.now().isoformat(),
+                "summary": {
+                    "products_count": totals["products_count"],
+                    "units_sold": self.money(totals["units_sold"]),
+                    "total_revenue": self.money(totals["total_revenue"]),
+                },
+                "items": items,
+            }
+        )
+
+
+class ProductMarginReportView(AdminReportView):
+    def get(self, request):
+        date_from, date_to = self.get_date_range(request)
+
+        qs = SaleItem.objects.select_related(
+            "sale", "sale__branch", "product"
+        ).filter(sale__status=SaleStatus.CONFIRMED)
+        qs = self.apply_date_filter(qs, "sale__sold_at", date_from, date_to)
+        qs = self.apply_branch_filter(qs, "sale__branch")
+
+        rows = (
+            qs.values(
+                "product_id",
+                "product__sku",
+                "product__name",
+                "product__sale_price",
+                "product__cost_price",
+            )
+            .annotate(
+                sales_count=Count("sale", distinct=True),
+            )
+        )
+
+        items = []
+        total_margin = Decimal("0.00")
+
+        for row in rows:
+            sale_price = row["product__sale_price"] or Decimal("0.00")
+            cost_price = row["product__cost_price"] or Decimal("0.00")
+
+            if sale_price > 0:
+                margin = ((sale_price - cost_price) / sale_price) * Decimal("100.0")
+            else:
+                margin = Decimal("0.00")
+
+            items.append({
+                "product": str(row["product_id"]),
+                "sku": row["product__sku"],
+                "name": row["product__name"],
+                "sale_price": self.money(sale_price),
+                "cost_price": self.money(cost_price),
+                "margin": float(margin),
+            })
+            total_margin += margin
+
+        # Order items by margin descending
+        items.sort(key=lambda x: x["margin"], reverse=True)
+
+        products_count = len(items)
+        average_margin = float(total_margin / products_count) if products_count > 0 else 0.0
+
+        return Response(
+            {
+                "filters": {"date_from": date_from, "date_to": date_to},
+                "scope": self.branch_scope(request),
+                "generated_at": timezone.now().isoformat(),
+                "summary": {
+                    "products_count": products_count,
+                    "average_margin": average_margin,
+                },
+                "items": items,
+            }
+        )
+
+
+

@@ -15,6 +15,21 @@ export async function getSalesByCategoryReport(params = {}) {
   return response.data;
 }
 
+export async function getDailyUtilityReport(params = {}) {
+  const response = await api.get("/reports/sales/daily-utility/", { params });
+  return response.data;
+}
+
+export async function getTopSellingProductsReport(params = {}) {
+  const response = await api.get("/reports/sales/top-selling/", { params });
+  return response.data;
+}
+
+export async function getProductMarginReport(params = {}) {
+  const response = await api.get("/reports/sales/margin/", { params });
+  return response.data;
+}
+
 export async function getCashRegisterReport(params = {}) {
   const response = await api.get("/reports/sales/cash-register/", { params });
   return response.data;

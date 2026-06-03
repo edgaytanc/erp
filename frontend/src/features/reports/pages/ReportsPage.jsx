@@ -6,14 +6,17 @@ import { listBranches, listUsers } from "../../admin/api/adminConfigApi";
 import {
   getCashRegisterReport,
   getCriticalStockReport,
+  getDailyUtilityReport,
   getInventoryByBranchReport,
   getInventoryMovementsReport,
   getInventoryValueReport,
+  getProductMarginReport,
   getPurchasedProductsReport,
   getPurchasesBySupplierReport,
   getPurchasesVsSalesReport,
   getSalesByCategoryReport,
   getSalesByProductReport,
+  getTopSellingProductsReport,
 } from "../api/reportsApi";
 import "../../../styles/reports.css";
 
@@ -58,6 +61,61 @@ const REPORT_GROUPS = [
           ["Ventas", "sales_count", "number"],
           ["Unidades", "units_sold", "number"],
           ["Total", "total", "money"],
+        ],
+      },
+      {
+        id: "daily-utility",
+        label: "Utilidad Diaria",
+        fetcher: getDailyUtilityReport,
+        usesDates: true,
+        summary: [
+          ["Ventas", "sales_count", "number"],
+          ["Ingresos Totales", "total_revenue", "money"],
+          ["Costo de Ventas", "total_cost", "money"],
+          ["Utilidad", "utility", "money"],
+        ],
+        columns: [
+          ["Fecha", "date"],
+          ["Ventas", "sales_count", "number"],
+          ["Ingresos Totales", "total_revenue", "money"],
+          ["Costo de Ventas", "total_cost", "money"],
+          ["Utilidad", "utility", "money"],
+        ],
+      },
+      {
+        id: "top-selling",
+        label: "Productos Más Vendidos",
+        fetcher: getTopSellingProductsReport,
+        usesDates: true,
+        usesLimit: true,
+        summary: [
+          ["Productos", "products_count"],
+          ["Unidades", "units_sold", "number"],
+          ["Total vendido", "total_revenue", "money"],
+        ],
+        columns: [
+          ["SKU", "sku"],
+          ["Producto", "name"],
+          ["Categoria", "category_name"],
+          ["Ventas", "sales_count", "number"],
+          ["Unidades", "units_sold", "number"],
+          ["Total", "total_revenue", "money"],
+        ],
+      },
+      {
+        id: "margin",
+        label: "Margen por Producto",
+        fetcher: getProductMarginReport,
+        usesDates: true,
+        summary: [
+          ["Productos", "products_count"],
+          ["Margen Promedio", "average_margin", "percentage"],
+        ],
+        columns: [
+          ["Producto", "name"],
+          ["Precio Venta", "sale_price", "money"],
+          ["Costo Compra", "cost_price", "money"],
+          ["Margen", "margin", "percentage"],
         ],
       },
       {
@@ -272,6 +330,7 @@ function valueFor(row, key, type) {
 
   if (type === "money") return formatMoney(value);
   if (type === "number") return formatNumber(value);
+  if (type === "percentage") return `${formatNumber(value)}%`;
   if (type === "date") return value ? new Date(value).toLocaleString("es-GT") : "Sin fecha";
   if (key === "type") return value === "IN" ? "Entrada" : value === "OUT" ? "Salida" : value || "-";
   if (key === "status") return value === "OPEN" ? "Abierta" : value === "CLOSED" ? "Cerrada" : value || "-";
@@ -299,6 +358,15 @@ function buildPdfHtml({ report, data, dateFrom, dateTo, branchLabel }) {
         )
         .join("")
     : `<tr><td colspan="${report.columns.length}">Sin datos para los filtros seleccionados.</td></tr>`;
+
+  const footerHtml = (report.id === "margin" && rows.length > 0)
+    ? `<tr style="font-weight: bold; background: #f1f5f9;">
+        <td>Promedio General</td>
+        <td>-</td>
+        <td>-</td>
+        <td>${escapeHtml(valueFor(data?.summary, "average_margin", "percentage"))}</td>
+       </tr>`
+    : "";
 
   return `
     <!doctype html>
@@ -403,7 +471,10 @@ function buildPdfHtml({ report, data, dateFrom, dateTo, branchLabel }) {
               <thead>
                 <tr>${report.columns.map(([label]) => `<th>${escapeHtml(label)}</th>`).join("")}</tr>
               </thead>
-              <tbody>${rowsHtml}</tbody>
+              <tbody>
+                ${rowsHtml}
+                ${footerHtml}
+              </tbody>
             </table>
           </main>
         </section>
@@ -419,6 +490,7 @@ export function ReportsPage() {
   const [dateTo, setDateTo] = useState(todayIsoDate);
   const [branchId, setBranchId] = useState("");
   const [cashierId, setCashierId] = useState("");
+  const [limit, setLimit] = useState(10);
   const [branches, setBranches] = useState([]);
   const [users, setUsers] = useState([]);
   const [reportData, setReportData] = useState(null);
@@ -448,6 +520,9 @@ export function ReportsPage() {
       }
       if (activeReport.usesCashiers) {
         params.cashier = cashierId || undefined;
+      }
+      if (activeReport.usesLimit) {
+        params.limit = limit;
       }
 
       const [branchesResponse, reportResponse] = await Promise.all([
@@ -597,6 +672,18 @@ export function ReportsPage() {
             </select>
           </label>
         ) : null}
+        {activeReport.usesLimit ? (
+          <label>
+            <span>Top N</span>
+            <input
+              onChange={(event) => setLimit(Number(event.target.value))}
+              type="number"
+              min="1"
+              max="500"
+              value={limit}
+            />
+          </label>
+        ) : null}
         <Button disabled={isLoading} type="submit">
           Aplicar
         </Button>
@@ -653,6 +740,14 @@ export function ReportsPage() {
                   ))}
                 </tr>
               ))}
+              {!isLoading && activeReport.id === "margin" && (reportData?.items || []).length > 0 ? (
+                <tr style={{ fontWeight: "bold", background: "#f1f5f9" }}>
+                  <td>Promedio General</td>
+                  <td>-</td>
+                  <td>-</td>
+                  <td>{valueFor(reportData?.summary, "average_margin", "percentage")}</td>
+                </tr>
+              ) : null}
               {!isLoading && (reportData?.items || []).length === 0 ? (
                 <tr>
                   <td colSpan={activeReport.columns.length}>
