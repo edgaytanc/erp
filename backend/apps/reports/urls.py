@@ -3,10 +3,12 @@ from django.urls import path
 from .views import (
     CashRegisterMovementsReportView,
     CriticalStockReportView,
+    DailyUtilityReportView,
     InventoryByBranchReportView,
     InventoryMovementsReportView,
     InventoryReportView,
     InventoryValueReportView,
+    ProductMarginReportView,
     PurchasedProductsReportView,
     PurchasesBySupplierReportView,
     PurchasesReportView,
@@ -14,10 +16,26 @@ from .views import (
     SalesByCategoryReportView,
     SalesByProductReportView,
     SalesReportView,
+    TopSellingProductsReportView,
 )
 
 urlpatterns = [
     path("reports/sales/", SalesReportView.as_view(), name="reports-sales"),
+    path(
+        "reports/sales/daily-utility/",
+        DailyUtilityReportView.as_view(),
+        name="reports-sales-daily-utility",
+    ),
+    path(
+        "reports/sales/top-selling/",
+        TopSellingProductsReportView.as_view(),
+        name="reports-sales-top-selling",
+    ),
+    path(
+        "reports/sales/margin/",
+        ProductMarginReportView.as_view(),
+        name="reports-sales-margin",
+    ),
     path(
         "reports/sales/cash-register/",
         CashRegisterMovementsReportView.as_view(),

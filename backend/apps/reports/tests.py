@@ -131,3 +131,155 @@ class ReportsApiTestCase(APITestCase):
         self.assertEqual(response.data["summary"]["total_qty"], "10.00")
         self.assertEqual(response.data["summary"]["inventory_value"], "80.00")
         self.assertEqual(response.data["items"][0]["sku"], "ARROZ-001")
+
+    def test_daily_utility_report(self):
+        self.authenticate_admin()
+        self.open_cash_register()
+
+        # Confirm a sale
+        sale_response = self.client.post(
+            reverse("sales-list"),
+            {
+                "branch": str(self.branch.id),
+                "payment_method": "CASH",
+                "items": [
+                    {
+                        "product": str(self.product.id),
+                        "qty": "2.000",
+                        "unit_price": "25.00",
+                    }
+                ],
+            },
+            format="json",
+        )
+        self.client.post(
+            reverse("sales-confirm", args=[sale_response.data["id"]]),
+            {"cash_received": "100.00"},
+            format="json",
+        )
+
+        response = self.client.get(reverse("reports-sales-daily-utility"))
+
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.assertEqual(response.data["summary"]["sales_count"], 1)
+        self.assertEqual(response.data["summary"]["total_revenue"], "50.00")
+        self.assertEqual(response.data["summary"]["total_cost"], "16.00") # 2 * 8.00
+        self.assertEqual(response.data["summary"]["utility"], "34.00") # 50.00 - 16.00
+        self.assertEqual(len(response.data["items"]), 1)
+        self.assertEqual(response.data["items"][0]["total_revenue"], "50.00")
+        self.assertEqual(response.data["items"][0]["total_cost"], "16.00")
+        self.assertEqual(response.data["items"][0]["utility"], "34.00")
+
+    def test_top_selling_products_report(self):
+        self.authenticate_admin()
+        self.open_cash_register()
+
+        # Create a second product
+        product2 = Product.objects.create(
+            category=self.category,
+            sku="FRIJOL-001",
+            name="Frijol",
+            sale_price=Decimal("15.00"),
+            cost_price=Decimal("5.00"),
+            min_stock=Decimal("5.00"),
+        )
+        register_purchase_entry(
+            branch=self.branch,
+            product=product2,
+            qty=Decimal("15.00"),
+            purchase_id="INITIAL2",
+            unit_cost=Decimal("5.00"),
+            created_by=self.admin_user,
+        )
+
+        # Confirm a sale of 6 units of Product 1 (Arroz)
+        sale1_response = self.client.post(
+            reverse("sales-list"),
+            {
+                "branch": str(self.branch.id),
+                "payment_method": "CASH",
+                "items": [
+                    {
+                        "product": str(self.product.id),
+                        "qty": "6.000",
+                        "unit_price": "25.00",
+                    }
+                ],
+            },
+            format="json",
+        )
+        self.client.post(
+            reverse("sales-confirm", args=[sale1_response.data["id"]]),
+            {"cash_received": "200.00"},
+            format="json",
+        )
+
+        # Confirm a sale of 4 units of Product 2 (Frijol)
+        sale2_response = self.client.post(
+            reverse("sales-list"),
+            {
+                "branch": str(self.branch.id),
+                "payment_method": "CASH",
+                "items": [
+                    {
+                        "product": str(product2.id),
+                        "qty": "4.000",
+                        "unit_price": "15.00",
+                    }
+                ],
+            },
+            format="json",
+        )
+        self.client.post(
+            reverse("sales-confirm", args=[sale2_response.data["id"]]),
+            {"cash_received": "100.00"},
+            format="json",
+        )
+
+        # Get top selling report with limit=1 (should return only Arroz, as it has 6 units sold)
+        response = self.client.get(reverse("reports-sales-top-selling"), {"limit": 1})
+
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.assertEqual(response.data["summary"]["products_count"], 2) # Total distinct products sold
+        self.assertEqual(response.data["summary"]["units_sold"], "10.00") # 6 + 4
+        self.assertEqual(len(response.data["items"]), 1) # limited by 1
+        self.assertEqual(response.data["items"][0]["sku"], "ARROZ-001")
+        self.assertEqual(response.data["items"][0]["units_sold"], "6.00")
+
+    def test_product_margin_report(self):
+        self.authenticate_admin()
+        self.open_cash_register()
+
+        # Confirm a sale of Product 1 (Arroz: sale_price 25.00, cost_price 8.00 -> Margin = (25-8)/25 = 68.0%)
+        sale_response = self.client.post(
+            reverse("sales-list"),
+            {
+                "branch": str(self.branch.id),
+                "payment_method": "CASH",
+                "items": [
+                    {
+                        "product": str(self.product.id),
+                        "qty": "1.000",
+                        "unit_price": "25.00",
+                    }
+                ],
+            },
+            format="json",
+        )
+        self.client.post(
+            reverse("sales-confirm", args=[sale_response.data["id"]]),
+            {"cash_received": "50.00"},
+            format="json",
+        )
+
+        response = self.client.get(reverse("reports-sales-margin"))
+
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.assertEqual(response.data["summary"]["products_count"], 1)
+        self.assertAlmostEqual(response.data["summary"]["average_margin"], 68.0)
+        self.assertEqual(len(response.data["items"]), 1)
+        self.assertEqual(response.data["items"][0]["sku"], "ARROZ-001")
+        self.assertAlmostEqual(response.data["items"][0]["margin"], 68.0)
+
+
+

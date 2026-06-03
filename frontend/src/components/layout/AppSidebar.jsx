@@ -22,7 +22,7 @@ export function AppSidebar() {
         <span className="sidebar__brand-badge">ERP</span>
         <div>
           <strong>Gestión Comercial</strong>
-          <small>React + Django REST</small>
+          {/* <small>React + Django REST</small> */}
         </div>
       </div>
 
