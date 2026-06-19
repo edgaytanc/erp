@@ -10,6 +10,7 @@ import {
   createSupplier,
   listPurchases,
   listSuppliers,
+  listDraftPurchases,
   unwrapResults,
 } from "../api/purchasesApi";
 import "../../../styles/purchases.css";
@@ -35,6 +36,7 @@ export function PurchasesPage() {
   const [suppliers, setSuppliers] = useState([]);
   const [products, setProducts] = useState([]);
   const [recentPurchases, setRecentPurchases] = useState([]);
+  const [draftPurchases, setDraftPurchases] = useState([]);
   const [supplierForm, setSupplierForm] = useState(emptySupplierForm);
   const [itemForm, setItemForm] = useState(emptyItemForm);
   const [items, setItems] = useState([]);
@@ -59,15 +61,17 @@ export function PurchasesPage() {
     setError(null);
 
     try {
-      const [suppliersResponse, productsResponse, purchasesResponse] = await Promise.all([
+      const [suppliersResponse, productsResponse, purchasesResponse, draftsResponse] = await Promise.all([
         listSuppliers(),
         listProducts({ q: nextSearch, is_active: true, page_size: 30, ordering: "name" }),
         listPurchases({ page_size: 10, branch: branchId }),
+        listDraftPurchases({ branch: branchId }),
       ]);
 
       setSuppliers(unwrapResults(suppliersResponse).filter((supplier) => supplier.is_active));
       setProducts(unwrapResults(productsResponse));
       setRecentPurchases(unwrapResults(purchasesResponse));
+      setDraftPurchases(unwrapResults(draftsResponse));
     } catch (requestError) {
       setError(extractApiErrorMessage(requestError, "No se pudo cargar compras."));
     } finally {
@@ -223,10 +227,50 @@ export function PurchasesPage() {
 
     try {
       const confirmedPurchase = await confirmPurchase(createdPurchase.id);
-      setCreatedPurchase(confirmedPurchase);
+      setCreatedPurchase(null);
       setItems([]);
       setInvoiceNumber("");
+      setSupplierId("");
       setSuccess("Compra confirmada. Stock inicial cargado.");
+      await loadPurchasesData(productSearch);
+    } catch (requestError) {
+      setError(extractApiErrorMessage(requestError, "No se pudo confirmar la compra."));
+    } finally {
+      setIsConfirming(false);
+    }
+  }
+
+  function handleSelectDraft(purchase) {
+    setCreatedPurchase(purchase);
+    setSupplierId(purchase.supplier || "");
+    setInvoiceNumber(purchase.invoice_number || "");
+    
+    const mappedItems = (purchase.items || []).map((item) => ({
+      product: item.product,
+      product_name: item.product_name || "Producto",
+      product_sku: item.product_sku || "",
+      qty: Number(item.qty).toFixed(3),
+      unit_cost: Number(item.unit_cost).toFixed(2),
+    }));
+    setItems(mappedItems);
+    setSuccess(`Orden DRAFT ${purchase.invoice_number || String(purchase.id).slice(0, 8)} cargada en el formulario.`);
+    setError(null);
+  }
+
+  async function handleConfirmDraftDirectly(purchaseId) {
+    setIsConfirming(true);
+    setError(null);
+    setSuccess(null);
+
+    try {
+      await confirmPurchase(purchaseId);
+      setSuccess("Compra confirmada. Stock inicial cargado.");
+      if (createdPurchase?.id === purchaseId) {
+        setCreatedPurchase(null);
+        setItems([]);
+        setInvoiceNumber("");
+        setSupplierId("");
+      }
       await loadPurchasesData(productSearch);
     } catch (requestError) {
       setError(extractApiErrorMessage(requestError, "No se pudo confirmar la compra."));
@@ -259,53 +303,122 @@ export function PurchasesPage() {
       {success ? <div className="purchases-alert purchases-alert--success">{success}</div> : null}
 
       <div className="purchases-grid">
-        <section className="purchases-panel">
-          <div className="purchases-panel__header">
-            <h3>Proveedor</h3>
-            <span>{suppliers.length} activos</span>
-          </div>
-
-          <form className="supplier-form" onSubmit={handleCreateSupplier}>
-            <label>
-              <span>Proveedor</span>
-              <input
-                onChange={(event) => updateSupplierField("name", event.target.value)}
-                placeholder="Nombre comercial"
-                type="text"
-                value={supplierForm.name}
-              />
-            </label>
-            <label>
-              <span>Contacto</span>
-              <input
-                onChange={(event) => updateSupplierField("contact_name", event.target.value)}
-                type="text"
-                value={supplierForm.contact_name}
-              />
-            </label>
-            <div className="purchases-form-row">
-              <label>
-                <span>Telefono</span>
-                <input
-                  onChange={(event) => updateSupplierField("phone", event.target.value)}
-                  type="text"
-                  value={supplierForm.phone}
-                />
-              </label>
-              <label>
-                <span>Direccion</span>
-                <input
-                  onChange={(event) => updateSupplierField("address", event.target.value)}
-                  type="text"
-                  value={supplierForm.address}
-                />
-              </label>
+        <div style={{ display: "grid", gap: "1rem" }}>
+          <section className="purchases-panel">
+            <div className="purchases-panel__header">
+              <h3>Proveedor</h3>
+              <span>{suppliers.length} activos</span>
             </div>
-            <Button disabled={isSavingSupplier} type="submit" variant="secondary">
-              Crear proveedor
-            </Button>
-          </form>
-        </section>
+
+            <form className="supplier-form" onSubmit={handleCreateSupplier}>
+              <label>
+                <span>Proveedor</span>
+                <input
+                  onChange={(event) => updateSupplierField("name", event.target.value)}
+                  placeholder="Nombre comercial"
+                  type="text"
+                  value={supplierForm.name}
+                />
+              </label>
+              <label>
+                <span>Contacto</span>
+                <input
+                  onChange={(event) => updateSupplierField("contact_name", event.target.value)}
+                  type="text"
+                  value={supplierForm.contact_name}
+                />
+              </label>
+              <div className="purchases-form-row">
+                <label>
+                  <span>Telefono</span>
+                  <input
+                    onChange={(event) => updateSupplierField("phone", event.target.value)}
+                    type="text"
+                    value={supplierForm.phone}
+                  />
+                </label>
+                <label>
+                  <span>Direccion</span>
+                  <input
+                    onChange={(event) => updateSupplierField("address", event.target.value)}
+                    type="text"
+                    value={supplierForm.address}
+                  />
+                </label>
+              </div>
+              <Button disabled={isSavingSupplier} type="submit" variant="secondary">
+                Crear proveedor
+              </Button>
+            </form>
+          </section>
+
+          <section className="purchases-panel">
+            <div className="purchases-panel__header">
+              <h3>Órdenes Pendientes (DRAFT)</h3>
+              <span>{draftPurchases.length}</span>
+            </div>
+
+            <div className="recent-purchases">
+              {draftPurchases.length === 0 ? (
+                <div className="purchase-empty">Sin órdenes pendientes.</div>
+              ) : (
+                draftPurchases.map((purchase) => (
+                  <article className="recent-purchase-row" key={purchase.id} style={{ display: "flex", flexDirection: "column", alignItems: "stretch", gap: "0.5rem" }}>
+                    <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+                      <div>
+                        <strong>{purchase.invoice_number || String(purchase.id).slice(0, 8)}</strong>
+                        <small style={{ display: "block", color: "#64748b" }}>
+                          {purchase.supplier_name || "Proveedor desconocido"}
+                        </small>
+                      </div>
+                      <strong style={{ alignSelf: "center" }}>
+                        Q {Number(purchase.total_cost || 0).toFixed(2)}
+                      </strong>
+                    </div>
+                    <div style={{ display: "flex", gap: "0.5rem", marginTop: "0.25rem" }}>
+                      <Button
+                        onClick={() => handleSelectDraft(purchase)}
+                        variant="secondary"
+                        style={{ flex: 1, padding: "0.4rem", fontSize: "0.85rem" }}
+                      >
+                        Cargar
+                      </Button>
+                      <Button
+                        onClick={() => handleConfirmDraftDirectly(purchase.id)}
+                        style={{ flex: 1, padding: "0.4rem", fontSize: "0.85rem" }}
+                      >
+                        Confirmar
+                      </Button>
+                    </div>
+                  </article>
+                ))
+              )}
+            </div>
+          </section>
+
+          <section className="purchases-panel">
+            <div className="purchases-panel__header">
+              <h3>Compras recientes</h3>
+              <span>{recentPurchases.length}</span>
+            </div>
+
+            <div className="recent-purchases">
+              {recentPurchases.length === 0 ? (
+                <div className="purchase-empty">Sin compras recientes.</div>
+              ) : (
+                recentPurchases.map((purchase) => (
+                  <article className="recent-purchase-row" key={purchase.id}>
+                    <div>
+                      <strong>{purchase.invoice_number || String(purchase.id).slice(0, 8)}</strong>
+                      <span>{purchase.status}</span>
+                    </div>
+                    <strong>Q {Number(purchase.total_cost || 0).toFixed(2)}</strong>
+                  </article>
+                ))
+              )}
+            </div>
+          </section>
+        </div>
 
         <section className="purchases-panel purchases-panel--entry">
           <div className="purchases-panel__header">
@@ -426,29 +539,6 @@ export function PurchasesPage() {
               </Button>
             </div>
           </form>
-        </section>
-
-        <section className="purchases-panel">
-          <div className="purchases-panel__header">
-            <h3>Compras recientes</h3>
-            <span>{recentPurchases.length}</span>
-          </div>
-
-          <div className="recent-purchases">
-            {recentPurchases.length === 0 ? (
-              <div className="purchase-empty">Sin compras recientes.</div>
-            ) : (
-              recentPurchases.map((purchase) => (
-                <article className="recent-purchase-row" key={purchase.id}>
-                  <div>
-                    <strong>{purchase.invoice_number || String(purchase.id).slice(0, 8)}</strong>
-                    <span>{purchase.status}</span>
-                  </div>
-                  <strong>Q {Number(purchase.total_cost || 0).toFixed(2)}</strong>
-                </article>
-              ))
-            )}
-          </div>
         </section>
       </div>
     </div>
