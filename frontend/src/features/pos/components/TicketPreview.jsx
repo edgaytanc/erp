@@ -3,9 +3,11 @@ import { formatMoney } from "../utils/money";
 export function TicketPreview({ ticket }) {
   if (!ticket) {
     return (
-      <section className="pos-panel pos-ticket">
-        <div className="pos-ticket__empty">El ticket aparecera al confirmar la venta.</div>
-      </section>
+      <div className="ticket-section">
+        <div className="ticket-preview">
+          El ticket aparecerá al confirmar la venta.
+        </div>
+      </div>
     );
   }
 
@@ -28,70 +30,72 @@ export function TicketPreview({ ticket }) {
   const paymentMethod = ticket.payment_method;
 
   return (
-    <section className="pos-panel pos-ticket">
-      <div className="pos-ticket__header">
-        <strong>{companyName}</strong>
-        {branchName ? <span>{branchName}</span> : null}
-        {companyTaxId ? <span>NIT {companyTaxId}</span> : null}
-        {companyPhone ? <span>Tel. {companyPhone}</span> : null}
-        {companyAddress ? <span>{companyAddress}</span> : null}
-        {receiptHeader ? <span>{receiptHeader}</span> : null}
-      </div>
-      <div className="pos-ticket__meta">
-        <span>Ticket</span>
-        <strong>{saleId}</strong>
-        <span>Estado</span>
-        <strong>{status}</strong>
-        <span>Pago</span>
-        <strong>{paymentMethod === "CASH" ? "Efectivo" : paymentMethod}</strong>
-        <span>Fecha</span>
-        {soldAt ? <span>{new Date(soldAt).toLocaleString("es-GT")}</span> : null}
-      </div>
-      <div className="pos-ticket__items">
-        {items.map((item) => (
-          <div className="pos-ticket__item" key={item.id || item.productId || item.product}>
-            <div>
-              <span>{item.product_name || item.name}</span>
-              <small>
-                {Number(item.qty || item.quantity)} x{" "}
-                {formatMoney(item.unit_price || item.unitPrice || 0)}
-              </small>
+    <div className="ticket-section">
+      <section className="pos-ticket">
+        <div className="pos-ticket__header">
+          <strong>{companyName}</strong>
+          {branchName ? <span>{branchName}</span> : null}
+          {companyTaxId ? <span>NIT {companyTaxId}</span> : null}
+          {companyPhone ? <span>Tel. {companyPhone}</span> : null}
+          {companyAddress ? <span>{companyAddress}</span> : null}
+          {receiptHeader ? <span>{receiptHeader}</span> : null}
+        </div>
+        <div className="pos-ticket__meta">
+          <span>Ticket</span>
+          <strong>{saleId}</strong>
+          <span>Estado</span>
+          <strong>{status}</strong>
+          <span>Pago</span>
+          <strong>{paymentMethod === "CASH" ? "Efectivo" : paymentMethod}</strong>
+          <span>Fecha</span>
+          {soldAt ? <span>{new Date(soldAt).toLocaleString("es-GT")}</span> : null}
+        </div>
+        <div className="pos-ticket__items">
+          {items.map((item) => (
+            <div className="pos-ticket__item" key={item.id || item.productId || item.product}>
+              <div>
+                <span>{item.product_name || item.name}</span>
+                <small>
+                  {Number(item.qty || item.quantity)} x{" "}
+                  {formatMoney(item.unit_price || item.unitPrice || 0)}
+                </small>
+              </div>
+              <strong>
+                {formatMoney(
+                  item.subtotal || Number(item.unit_price || item.unitPrice || 0) * Number(item.qty || item.quantity),
+                )}
+              </strong>
             </div>
-            <strong>
-              {formatMoney(
-                item.subtotal || Number(item.unit_price || item.unitPrice || 0) * Number(item.qty || item.quantity),
-              )}
-            </strong>
+          ))}
+        </div>
+        <div className="pos-ticket__totals">
+          <div>
+            <span>Subtotal</span>
+            <strong>{formatMoney(subtotal)}</strong>
           </div>
-        ))}
-      </div>
-      <div className="pos-ticket__totals">
-        <div>
-          <span>Subtotal</span>
-          <strong>{formatMoney(subtotal)}</strong>
+          <div>
+            <span>Impuestos</span>
+            <strong>{formatMoney(tax)}</strong>
+          </div>
+          <div className="pos-ticket__total">
+            <span>Total</span>
+            <strong>{formatMoney(total)}</strong>
+          </div>
+          {paymentMethod === "CASH" ? (
+            <>
+              <div>
+                <span>Recibido</span>
+                <strong>{formatMoney(cashReceived)}</strong>
+              </div>
+              <div>
+                <span>Vuelto</span>
+                <strong>{formatMoney(cashChange)}</strong>
+              </div>
+            </>
+          ) : null}
         </div>
-        <div>
-          <span>Impuestos</span>
-          <strong>{formatMoney(tax)}</strong>
-        </div>
-        <div className="pos-ticket__total">
-          <span>Total</span>
-          <strong>{formatMoney(total)}</strong>
-        </div>
-        {paymentMethod === "CASH" ? (
-          <>
-            <div>
-              <span>Recibido</span>
-              <strong>{formatMoney(cashReceived)}</strong>
-            </div>
-            <div>
-              <span>Vuelto</span>
-              <strong>{formatMoney(cashChange)}</strong>
-            </div>
-          </>
-        ) : null}
-      </div>
-      <div className="pos-ticket__footer">{receiptFooter}</div>
-    </section>
+        <div className="pos-ticket__footer">{receiptFooter}</div>
+      </section>
+    </div>
   );
 }

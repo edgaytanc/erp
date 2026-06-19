@@ -1,20 +1,36 @@
-import { Button } from "../../../components/common/Button";
-
 export function SaleActions({ canCancel, canConfirm, onCancel, onClear, onConfirm }) {
   return (
-    <section className="pos-actions">
-      <Button disabled={!canConfirm} onClick={onConfirm}>
+    <div className="action-buttons">
+      <button
+        className="btn btn-primary"
+        disabled={!canConfirm}
+        onClick={onConfirm}
+        type="button"
+      >
         Confirmar venta
-      </Button>
-      <Button onClick={onClear} variant="secondary">
+      </button>
+      <button
+        className="btn btn-secondary"
+        onClick={onClear}
+        type="button"
+      >
         Nueva venta
-      </Button>
-      <Button disabled={!canCancel} onClick={onCancel} variant="secondary">
+      </button>
+      <button
+        className="btn btn-danger"
+        disabled={!canCancel}
+        onClick={onCancel}
+        type="button"
+      >
         Anular
-      </Button>
-      <Button onClick={() => window.print()} variant="secondary">
+      </button>
+      <button
+        className="btn btn-success"
+        onClick={() => window.print()}
+        type="button"
+      >
         Imprimir
-      </Button>
-    </section>
+      </button>
+    </div>
   );
 }

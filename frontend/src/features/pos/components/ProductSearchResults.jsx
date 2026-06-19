@@ -6,30 +6,39 @@ export function ProductSearchResults({ isLoading, results, selectedIndex, onSele
   }
 
   if (results.length === 0) {
-    return <div className="pos-search-empty">Sin productos para esta busqueda.</div>;
+    return null;
   }
 
   return (
-    <div className="pos-search-results" role="listbox" aria-label="Resultados de productos">
-      {results.map((product, index) => (
-        <button
-          className={`pos-search-result ${selectedIndex === index ? "pos-search-result--active" : ""}`}
-          disabled={product.stock !== null && product.stock <= 0}
-          key={product.id}
-          onClick={() => onSelect(product)}
-          onMouseEnter={() => onHighlight(index)}
-          type="button"
-        >
-          <span>
-            <strong>{product.name}</strong>
-            <small>{product.sku}</small>
-          </span>
-          <span>
-            <strong>{formatMoney(product.price)}</strong>
-            <small>{product.stock === null ? "Stock sin sucursal" : product.stock <= 0 ? "Sin stock" : `Stock ${product.stock}`}</small>
-          </span>
-        </button>
-      ))}
+    <div className="products-section" role="listbox" aria-label="Resultados de productos">
+      {results.map((product, index) => {
+        const isOutOfStock = product.stock !== null && product.stock <= 0;
+        return (
+          <button
+            className={`product-item ${selectedIndex === index ? "selected" : ""} ${isOutOfStock ? "out-of-stock" : ""}`}
+            disabled={isOutOfStock}
+            key={product.id}
+            onClick={() => onSelect(product)}
+            onMouseEnter={() => onHighlight(index)}
+            type="button"
+          >
+            <div className="product-info">
+              <h4>{product.name}</h4>
+              <p>{product.sku}</p>
+            </div>
+            <div className="product-price">
+              <div className="price">{formatMoney(product.price)}</div>
+              <div className={`stock ${isOutOfStock ? "out" : ""}`}>
+                {product.stock === null
+                  ? "Stock sin sucursal"
+                  : isOutOfStock
+                    ? "Sin stock"
+                    : `Stock ${product.stock}`}
+              </div>
+            </div>
+          </button>
+        );
+      })}
     </div>
   );
 }

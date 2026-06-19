@@ -4,30 +4,43 @@ export function CartItemRow({ item, onRemove, onUpdateQuantity }) {
   const subtotal = Number(item.unitPrice || 0) * item.quantity;
 
   return (
-    <div className="pos-cart-row">
-      <div className="pos-cart-row__product">
-        <strong>{item.name}</strong>
-        <span>{item.sku}</span>
+    <div className="cart-item">
+      <div>
+        <div className="cart-item-name">{item.name}</div>
+        <div className="cart-item-sku">{item.sku}</div>
       </div>
-      <div className="pos-cart-row__quantity">
-        <button type="button" onClick={() => onUpdateQuantity(item.productId, item.quantity - 1)}>
+      <div className="quantity-controls">
+        <button
+          className="qty-btn"
+          onClick={() => onUpdateQuantity(item.productId, item.quantity - 1)}
+          type="button"
+        >
           -
         </button>
         <input
           aria-label={`Cantidad de ${item.name}`}
+          className="qty-value"
           min="1"
           max={item.stock}
-          onChange={(event) => onUpdateQuantity(item.productId, event.target.value)}
+          onChange={(event) => onUpdateQuantity(item.productId, Number(event.target.value))}
           type="number"
           value={item.quantity}
         />
-        <button type="button" onClick={() => onUpdateQuantity(item.productId, item.quantity + 1)}>
+        <button
+          className="qty-btn"
+          onClick={() => onUpdateQuantity(item.productId, item.quantity + 1)}
+          type="button"
+        >
           +
         </button>
       </div>
-      <span className="pos-cart-row__price">{formatMoney(item.unitPrice)}</span>
-      <strong className="pos-cart-row__subtotal">{formatMoney(subtotal)}</strong>
-      <button className="pos-icon-button" onClick={() => onRemove(item.productId)} type="button">
+      <div className="cart-item-price">{formatMoney(item.unitPrice)}</div>
+      <div className="cart-item-total">{formatMoney(subtotal)}</div>
+      <button
+        className="btn-remove"
+        onClick={() => onRemove(item.productId)}
+        type="button"
+      >
         Quitar
       </button>
     </div>

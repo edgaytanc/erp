@@ -2,27 +2,23 @@ import { CartItemRow } from "./CartItemRow";
 
 export function CartPanel({ items, onRemove, onUpdateQuantity }) {
   return (
-    <section className="pos-panel pos-panel--cart">
-      <div className="pos-panel__header">
-        <div>
-          <h2>Carrito</h2>
-          <p>Actualizacion inmediata de cantidades</p>
-        </div>
-      </div>
+    <div className="cart-section">
+      <h3>Carrito</h3>
+      <p>Actualización inmediata de cantidades</p>
 
       {items.length === 0 ? (
-        <div className="pos-cart-empty">
-          <strong>Carrito vacio</strong>
-          <span>Busca un producto y presiona Enter para agregarlo.</span>
+        <div className="empty-cart">
+          <div className="empty-cart-icon">🛒</div>
+          <p>El carrito está vacío</p>
         </div>
       ) : (
-        <div className="pos-cart-list">
-          <div className="pos-cart-head">
-            <span>Producto</span>
-            <span>Cant.</span>
-            <span>Precio</span>
-            <span>Total</span>
-            <span />
+        <div id="cart-content">
+          <div className="cart-header">
+            <div>Producto</div>
+            <div>Cant.</div>
+            <div>Precio</div>
+            <div>Total</div>
+            <div></div>
           </div>
           {items.map((item) => (
             <CartItemRow
@@ -34,6 +30,6 @@ export function CartPanel({ items, onRemove, onUpdateQuantity }) {
           ))}
         </div>
       )}
-    </section>
+    </div>
   );
 }
