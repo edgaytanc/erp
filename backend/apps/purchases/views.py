@@ -33,6 +33,7 @@ class PurchaseViewSet(viewsets.ModelViewSet):
         )
         user = self.request.user
         branch_id = self.request.query_params.get("branch")
+        status_param = self.request.query_params.get("status")
 
         if getattr(user, "branch_id", None):
             qs = qs.filter(branch_id=user.branch_id)
@@ -40,6 +41,9 @@ class PurchaseViewSet(viewsets.ModelViewSet):
             qs = qs.none()
         elif branch_id:
             qs = qs.filter(branch_id=branch_id)
+
+        if status_param:
+            qs = qs.filter(status=status_param)
 
         return qs
 
@@ -74,6 +78,16 @@ class PurchaseViewSet(viewsets.ModelViewSet):
         serializer.is_valid(raise_exception=True)
         purchase = serializer.save()
         return Response(PurchaseSerializer(purchase, context={"request": request}).data, status=status.HTTP_201_CREATED)
+
+    @action(detail=False, methods=["get"], url_path="drafts")
+    def drafts(self, request):
+        """
+        GET /api/purchases/drafts/
+        Obtiene las compras con estado DRAFT
+        """
+        drafts = self.get_queryset().filter(status=PurchaseStatus.DRAFT)
+        serializer = self.get_serializer(drafts, many=True)
+        return Response(serializer.data)
 
     @action(detail=True, methods=["post"], url_path="confirm")
     def confirm(self, request, pk=None):

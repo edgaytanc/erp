@@ -15,6 +15,11 @@ export async function listPurchases(params = {}) {
   return response.data;
 }
 
+export async function listDraftPurchases(params = {}) {
+  const response = await api.get("/purchases/drafts/", { params });
+  return response.data;
+}
+
 export async function createPurchase(payload) {
   const response = await api.post("/purchases/", payload);
   return response.data;

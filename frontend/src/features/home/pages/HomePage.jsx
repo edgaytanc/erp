@@ -256,7 +256,7 @@ function CashRegisterModal({ mode, onClose, onSubmit, open, suggestedAmount }) {
   );
 }
 
-function AdminDashboard({ data }) {
+function AdminDashboard({ data, isCashRegisterBusy, onCloseCashRegister, onOpenCashRegister, user }) {
   const confirmedSales = data.sales.filter((sale) => sale.status === "CONFIRMED");
   const purchases = data.purchases;
   const lowStock = data.lowStock;
@@ -281,8 +281,66 @@ function AdminDashboard({ data }) {
     .sort((a, b) => new Date(b.at || 0) - new Date(a.at || 0))
     .slice(0, 5);
 
+  const [cashModal, setCashModal] = useState(null);
+  const cashRegister = data.cashRegisterSession;
+  const isCashOpen = cashRegister?.status === "OPEN";
+  const expectedCash = Number(cashRegister?.expected_cash || 0);
+
+  async function handleCashSubmit(amount) {
+    const success =
+      cashModal === "close" ? await onCloseCashRegister(amount) : await onOpenCashRegister(amount);
+    if (success) setCashModal(null);
+  }
+
   return (
     <div className="dashboard">
+      {user?.branch ? (
+        <section className="dashboard-pos-hero" style={{ marginBottom: "24px" }}>
+          <div>
+            <p>Sucursal: {user?.branch_name || "Sin sucursal"}</p>
+            <h1>Turno de ventas (Control de Caja)</h1>
+            <span>
+              {isCashOpen
+                ? `Caja abierta por ${cashRegister.cashier_name || "cajero"}`
+                : "Caja cerrada"}
+            </span>
+            {isCashOpen ? (
+              <small>
+                Apertura {formatMoney(cashRegister.opening_amount)} | Efectivo esperado{" "}
+                {formatMoney(expectedCash)}
+              </small>
+            ) : null}
+          </div>
+          <div className="dashboard-pos-actions">
+            {!isCashOpen ? (
+              <button
+                className="dashboard-big-action"
+                disabled={isCashRegisterBusy}
+                onClick={() => setCashModal("open")}
+                type="button"
+              >
+                <strong>Abrir caja</strong>
+                <span>Monto inicial</span>
+              </button>
+            ) : null}
+            <button
+              className="dashboard-big-action dashboard-big-action--muted"
+              disabled={!isCashOpen || isCashRegisterBusy}
+              onClick={() => setCashModal("close")}
+              type="button"
+            >
+              <strong>Cerrar caja</strong>
+              <span>Conteo final</span>
+            </button>
+            {isCashOpen ? (
+              <Link to="/pos" className="dashboard-big-action">
+                <strong>Nueva venta</strong>
+                <span>Abrir POS</span>
+              </Link>
+            ) : null}
+          </div>
+        </section>
+      ) : null}
       <section className="dashboard-kpis" aria-label="KPIs rápidos">
         <KpiCard
           icon="$"
@@ -372,6 +430,13 @@ function AdminDashboard({ data }) {
           <EmptyState />
         )}
       </Panel>
+      <CashRegisterModal
+        mode={cashModal}
+        onClose={() => setCashModal(null)}
+        onSubmit={handleCashSubmit}
+        open={Boolean(cashModal)}
+        suggestedAmount={expectedCash}
+      />
     </div>
   );
 }
@@ -518,13 +583,23 @@ function PosDashboard({ data, isCashRegisterBusy, onCloseCashRegister, onOpenCas
     if (success) setCashModal(null);
   }
 
+  const isOwnCashSession = cashRegister && String(cashRegister.cashier) === String(user?.id);
+  const canNewSale = isCashOpen && isOwnCashSession;
+  const canClose = isCashOpen && (isOwnCashSession || user?.role === "admin");
+
   return (
     <div className="dashboard">
       <section className="dashboard-pos-hero">
         <div>
           <p>Sucursal: {user?.branch_name || "Sin sucursal"}</p>
           <h1>Turno de ventas</h1>
-          <span>{isCashOpen ? "Caja abierta" : "Caja cerrada"}</span>
+          <span>
+            {isCashOpen
+              ? isOwnCashSession
+                ? "Caja abierta"
+                : `Caja abierta por ${cashRegister.cashier_name || "otro usuario"}`
+              : "Caja cerrada"}
+          </span>
           {isCashOpen ? (
             <small>
               Apertura {formatMoney(cashRegister.opening_amount)} | Efectivo esperado{" "}
@@ -534,10 +609,17 @@ function PosDashboard({ data, isCashRegisterBusy, onCloseCashRegister, onOpenCas
         </div>
         <div className="dashboard-pos-actions">
           {isCashOpen ? (
-            <Link to="/pos" className="dashboard-big-action">
-              <strong>Nueva venta</strong>
-              <span>Abrir POS</span>
-            </Link>
+            canNewSale ? (
+              <Link to="/pos" className="dashboard-big-action">
+                <strong>Nueva venta</strong>
+                <span>Abrir POS</span>
+              </Link>
+            ) : (
+              <button className="dashboard-big-action" disabled type="button">
+                <strong>Nueva venta</strong>
+                <span>Caja ajena</span>
+              </button>
+            )
           ) : (
             <button
               className="dashboard-big-action"
@@ -551,17 +633,24 @@ function PosDashboard({ data, isCashRegisterBusy, onCloseCashRegister, onOpenCas
           )}
           <button
             className="dashboard-big-action dashboard-big-action--muted"
-            disabled={!isCashOpen || isCashRegisterBusy}
+            disabled={!canClose || isCashRegisterBusy}
             onClick={() => setCashModal("close")}
             type="button"
           >
             <strong>Cerrar caja</strong>
             <span>Conteo final</span>
           </button>
-          <Link to="/pos" className="dashboard-big-action dashboard-big-action--muted">
-            <strong>Mis ventas hoy</strong>
-            <span>Historial</span>
-          </Link>
+          {canNewSale ? (
+            <Link to="/pos" className="dashboard-big-action dashboard-big-action--muted">
+              <strong>Mis ventas hoy</strong>
+              <span>Historial</span>
+            </Link>
+          ) : (
+            <button className="dashboard-big-action dashboard-big-action--muted" disabled type="button">
+              <strong>Mis ventas hoy</strong>
+              <span>Historial</span>
+            </button>
+          )}
         </div>
       </section>
 
@@ -662,6 +751,11 @@ export function HomePage() {
               unwrapInventoryResults(value),
             ])
           );
+          if (user?.branch) {
+            requests.push(
+              getCurrentCashRegister().then((value) => ["cashRegisterSession", value.session])
+            );
+          }
         }
 
         if (role === APP_ROLES.PURCHASES) {
@@ -766,7 +860,15 @@ export function HomePage() {
       {isLoading ? <div className="dashboard-loading">Cargando información...</div> : null}
       {error ? <div className="alert alert--error">{error}</div> : null}
 
-      {!isLoading && !error && role === APP_ROLES.ADMIN ? <AdminDashboard data={data} /> : null}
+      {!isLoading && !error && role === APP_ROLES.ADMIN ? (
+        <AdminDashboard
+          data={data}
+          isCashRegisterBusy={isCashRegisterBusy}
+          onCloseCashRegister={handleCloseCashRegister}
+          onOpenCashRegister={handleOpenCashRegister}
+          user={user}
+        />
+      ) : null}
       {!isLoading && !error && role === APP_ROLES.PURCHASES ? (
         <PurchasesDashboard data={data} />
       ) : null}

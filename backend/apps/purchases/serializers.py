@@ -24,12 +24,17 @@ class SupplierSerializer(serializers.ModelSerializer):
 
 
 class PurchaseItemSerializer(serializers.ModelSerializer):
+    product_name = serializers.CharField(source="product.name", read_only=True)
+    product_sku = serializers.CharField(source="product.sku", read_only=True)
+
     class Meta:
         model = PurchaseItem
         fields = [
             "id",
             "purchase",
             "product",
+            "product_name",
+            "product_sku",
             "qty",
             "unit_cost",
             "subtotal",
@@ -45,13 +50,17 @@ class PurchaseItemSerializer(serializers.ModelSerializer):
 
 class PurchaseSerializer(serializers.ModelSerializer):
     items = PurchaseItemSerializer(many=True, required=False)
+    supplier_name = serializers.CharField(source="supplier.name", read_only=True)
+    branch_name = serializers.CharField(source="branch.name", read_only=True)
 
     class Meta:
         model = Purchase
         fields = [
             "id",
             "branch",
+            "branch_name",
             "supplier",
+            "supplier_name",
             "invoice_number",
             "status",
             "purchased_at",

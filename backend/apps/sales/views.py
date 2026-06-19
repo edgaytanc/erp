@@ -46,7 +46,7 @@ class CashRegisterViewSet(viewsets.ReadOnlyModelViewSet):
     def current(self, request):
         session = (
             self.get_queryset()
-            .filter(cashier=request.user, status="OPEN")
+            .filter(status="OPEN")
             .order_by("-opened_at")
             .first()
         )

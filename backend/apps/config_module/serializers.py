@@ -60,6 +60,7 @@ class CompanySettingsSerializer(serializers.ModelSerializer):
             "tax_rate",
             "money_rounding",
             "sale_void_window_minutes",
+            "max_cash_sessions_per_day",
             "is_active",
             "created_at",
             "updated_at",
