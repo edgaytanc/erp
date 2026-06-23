@@ -26,27 +26,25 @@ export function ProductSearch({
 
     if (event.key === "Enter") {
       event.preventDefault();
-      onAddProduct(results[selectedIndex]);
+      if (results[selectedIndex]) {
+        onAddProduct(results[selectedIndex]);
+      }
     }
   }
 
   return (
-    <section className="pos-panel pos-panel--search">
-      <div className="pos-panel__header">
-        <div>
-          <h2>Buscar producto</h2>
-          <p>Nombre, SKU o codigo de barra</p>
-        </div>
-      </div>
+    <div className="search-section">
+      <h3>Buscar producto</h3>
+      <p>Nombre, SKU o código de barra</p>
       <input
         autoFocus
-        className="pos-search-input"
+        className="search-input"
         disabled={disabled}
         onChange={(event) => onSearchTermChange(event.target.value)}
         onKeyDown={handleKeyDown}
         placeholder={disabled ? "Tu usuario necesita una sucursal asignada" : "Escanea o escribe para agregar..."}
         ref={inputRef}
-        type="search"
+        type="text"
         value={searchTerm}
       />
       <ProductSearchResults
@@ -56,6 +54,6 @@ export function ProductSearch({
         results={results}
         selectedIndex={selectedIndex}
       />
-    </section>
+    </div>
   );
 }
