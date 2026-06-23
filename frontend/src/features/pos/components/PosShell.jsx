@@ -78,6 +78,11 @@ export function PosShell({ actions, isProductSearchLoading, searchInputRef, stat
       <div className="main-content">
         {/* Left Column */}
         <div className="left-column">
+          <CartPanel
+            items={state.cartItems}
+            onRemove={actions.removeItem}
+            onUpdateQuantity={actions.updateQuantity}
+          />
           <ProductSearch
             disabled={!state.branchId || Boolean(state.lastConfirmedSale) || !hasOpenCashRegister}
             inputRef={searchInputRef}
@@ -88,11 +93,6 @@ export function PosShell({ actions, isProductSearchLoading, searchInputRef, stat
             results={state.searchResults}
             searchTerm={state.searchTerm}
             selectedIndex={state.selectedResultIndex}
-          />
-          <CartPanel
-            items={state.cartItems}
-            onRemove={actions.removeItem}
-            onUpdateQuantity={actions.updateQuantity}
           />
         </div>
 
