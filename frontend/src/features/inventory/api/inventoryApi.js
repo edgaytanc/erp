@@ -10,6 +10,16 @@ export async function createCategory(payload) {
   return response.data;
 }
 
+export async function updateCategory(categoryId, payload) {
+  const response = await api.put(`/inventory/categories/${categoryId}/`, payload);
+  return response.data;
+}
+
+export async function deleteCategory(categoryId) {
+  const response = await api.delete(`/inventory/categories/${categoryId}/`);
+  return response.data;
+}
+
 export async function listProducts(params = {}) {
   const response = await api.get("/inventory/products/", { params });
   return response.data;

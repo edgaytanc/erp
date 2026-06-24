@@ -10,6 +10,16 @@ export async function createSupplier(payload) {
   return response.data;
 }
 
+export async function updateSupplier(supplierId, payload) {
+  const response = await api.put(`/suppliers/${supplierId}/`, payload);
+  return response.data;
+}
+
+export async function deleteSupplier(supplierId) {
+  const response = await api.delete(`/suppliers/${supplierId}/`);
+  return response.data;
+}
+
 export async function listPurchases(params = {}) {
   const response = await api.get("/purchases/", { params });
   return response.data;
