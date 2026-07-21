@@ -63,3 +63,21 @@ export async function updateUser(userId, payload) {
 export function unwrapResults(data) {
   return Array.isArray(data) ? data : data?.results || [];
 }
+
+export async function importProductsCsv(file) {
+  const formData = new FormData();
+  formData.append("file", file);
+  const response = await api.post("/inventory/products/import-csv/", formData, {
+    headers: {
+      "Content-Type": "multipart/form-data",
+    },
+  });
+  return response.data;
+}
+
+export async function downloadProductsSampleCsv() {
+  const response = await api.get("/inventory/products/sample-csv/", {
+    responseType: "blob",
+  });
+  return response.data;
+}
