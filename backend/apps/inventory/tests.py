@@ -1,3 +1,4 @@
+import io
 from decimal import Decimal
 
 from django.contrib.auth import get_user_model
@@ -160,6 +161,99 @@ class InventoryAPITestCase(APITestCase):
         self.assertEqual(response.status_code, status.HTTP_200_OK)
         self.assertEqual(response.data["low_stock_count"], 1)
         self.assertEqual(response.data["lowest_items"][0]["sku"], "ARROZ-001")
+
+    def test_sample_csv_download(self):
+        url = reverse("inventory-products-sample-csv")
+        response = self.client.get(url)
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.assertEqual(response["Content-Type"], "text/csv")
+        self.assertIn("sku,name,description,sale_price,cost_price,min_stock,category,barcode,is_active", response.content.decode("utf-8-sig"))
+
+    def test_import_csv_success(self):
+        csv_content = (
+            "sku,name,description,sale_price,cost_price,min_stock,category,barcode,is_active\n"
+            "CSV-PROD-001,Producto CSV 1,Desc 1,15.50,10.00,5.00,Categoria Nueva,11223344,true\n"
+            "CSV-PROD-002,Producto CSV 2,Desc 2,25.00,15.00,2.00,,55667788,false\n"
+        )
+        csv_file = io.BytesIO(csv_content.encode("utf-8"))
+        csv_file.name = "test_products.csv"
+
+        url = reverse("inventory-products-import-csv")
+        response = self.client.post(url, {"file": csv_file}, format="multipart")
+
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.assertEqual(response.data["creados"], 2)
+        self.assertEqual(response.data["actualizados"], 0)
+
+        prod1 = Product.objects.get(sku="CSV-PROD-001")
+        self.assertEqual(prod1.name, "Producto CSV 1")
+        self.assertEqual(prod1.sale_price, Decimal("15.50"))
+        self.assertEqual(prod1.cost_price, Decimal("10.00"))
+        self.assertEqual(prod1.category.name, "Categoria Nueva")
+        self.assertEqual(prod1.barcode, "11223344")
+        self.assertTrue(prod1.is_active)
+
+        prod2 = Product.objects.get(sku="CSV-PROD-002")
+        self.assertEqual(prod2.name, "Producto CSV 2")
+        self.assertIsNone(prod2.category)
+        self.assertFalse(prod2.is_active)
+
+    def test_import_csv_update_existing(self):
+        existing = Product.objects.create(
+            sku="CSV-UPDATE-001",
+            name="Original Name",
+            sale_price=Decimal("10.00"),
+            cost_price=Decimal("5.00"),
+        )
+
+        csv_content = (
+            "sku,name,description,sale_price,cost_price,min_stock,category,barcode,is_active\n"
+            "CSV-UPDATE-001,Updated Name,Updated Desc,12.50,6.00,1.00,,,\n"
+        )
+        csv_file = io.BytesIO(csv_content.encode("utf-8"))
+        csv_file.name = "test_products.csv"
+
+        url = reverse("inventory-products-import-csv")
+        response = self.client.post(url, {"file": csv_file}, format="multipart")
+
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.assertEqual(response.data["creados"], 0)
+        self.assertEqual(response.data["actualizados"], 1)
+
+        existing.refresh_from_db()
+        self.assertEqual(existing.name, "Updated Name")
+        self.assertEqual(existing.sale_price, Decimal("12.50"))
+        self.assertEqual(existing.cost_price, Decimal("6.00"))
+
+    def test_import_csv_missing_fields_validation_error(self):
+        csv_content = (
+            "sku,name,description,sale_price,cost_price,min_stock,category,barcode,is_active\n"
+            "BAD-001,,Desc,not_a_number,10.00,5.00,,,\n"
+        )
+        csv_file = io.BytesIO(csv_content.encode("utf-8"))
+        csv_file.name = "test_products.csv"
+
+        url = reverse("inventory-products-import-csv")
+        response = self.client.post(url, {"file": csv_file}, format="multipart")
+
+        self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
+        self.assertIn("detalles", response.data)
+        row_errors = response.data["detalles"][0]["errores"]
+        self.assertTrue(any("name" in err for err in row_errors))
+        self.assertTrue(any("sale_price" in err for err in row_errors))
+
+    def test_import_csv_non_admin_forbidden(self):
+        self.client.force_authenticate(user=self.sales_user)
+        csv_content = (
+            "sku,name,description,sale_price,cost_price,min_stock,category,barcode,is_active\n"
+            "FORBID-01,Name,Desc,10.00,,,,,true\n"
+        )
+        csv_file = io.BytesIO(csv_content.encode("utf-8"))
+        csv_file.name = "test_products.csv"
+
+        url = reverse("inventory-products-import-csv")
+        response = self.client.post(url, {"file": csv_file}, format="multipart")
+        self.assertEqual(response.status_code, status.HTTP_403_FORBIDDEN)
 
 
 class InventoryServiceIntegrationTestCase(TestCase):

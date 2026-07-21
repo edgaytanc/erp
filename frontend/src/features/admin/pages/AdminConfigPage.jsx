@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 
 import { Button } from "../../../components/common/Button";
 import { extractApiErrorMessage } from "../../../lib/apiError";
@@ -16,6 +16,8 @@ import {
   updateCompany,
   updateCompanySettings,
   updateUser,
+  importProductsCsv,
+  downloadProductsSampleCsv,
 } from "../api/adminConfigApi";
 import "../../../styles/admin-config.css";
 
@@ -106,6 +108,74 @@ export function AdminConfigPage() {
   const [isSaving, setIsSaving] = useState(false);
   const [error, setError] = useState(null);
   const [success, setSuccess] = useState(null);
+
+  const [csvFile, setCsvFile] = useState(null);
+  const [isUploading, setIsUploading] = useState(false);
+  const [csvErrors, setCsvErrors] = useState([]);
+  const [csvSuccess, setCsvSuccess] = useState(null);
+  const fileInputRef = useRef(null);
+
+  function handleFileChange(event) {
+    setCsvSuccess(null);
+    setCsvErrors([]);
+    setError(null);
+    setSuccess(null);
+    if (event.target.files && event.target.files.length > 0) {
+      setCsvFile(event.target.files[0]);
+    } else {
+      setCsvFile(null);
+    }
+  }
+
+  async function handleCsvUpload(event) {
+    event.preventDefault();
+    if (!csvFile) return;
+
+    setIsUploading(true);
+    setError(null);
+    setSuccess(null);
+    setCsvSuccess(null);
+    setCsvErrors([]);
+
+    try {
+      const response = await importProductsCsv(csvFile);
+      const successMsg = `Carga masiva finalizada con éxito. Creados: ${response.creados}, Actualizados: ${response.actualizados}.`;
+      setSuccess(successMsg);
+      setCsvSuccess(successMsg);
+      setCsvFile(null);
+      if (fileInputRef.current) {
+        fileInputRef.current.value = "";
+      }
+    } catch (requestError) {
+      if (requestError.response?.data?.detalles) {
+        setCsvErrors(requestError.response.data.detalles);
+        setError(requestError.response.data.error || "El archivo contiene errores de validación.");
+      } else {
+        setError(extractApiErrorMessage(requestError, "No se pudo realizar la carga masiva."));
+      }
+    } finally {
+      setIsUploading(false);
+    }
+  }
+
+  async function handleDownloadSample() {
+    setError(null);
+    setSuccess(null);
+    setCsvErrors([]);
+    try {
+      const blob = await downloadProductsSampleCsv();
+      const url = window.URL.createObjectURL(blob);
+      const link = document.createElement("a");
+      link.href = url;
+      link.setAttribute("download", "productos_muestra.csv");
+      document.body.appendChild(link);
+      link.click();
+      link.parentNode.removeChild(link);
+      window.URL.revokeObjectURL(url);
+    } catch (requestError) {
+      setError(extractApiErrorMessage(requestError, "No se pudo descargar el archivo de muestra."));
+    }
+  }
 
   const selectedCompany = useMemo(
     () => companies.find((company) => company.id === selectedCompanyId) || null,
@@ -551,6 +621,73 @@ export function AdminConfigPage() {
               </article>
             ))}
           </div>
+        </section>
+
+        <section className="admin-panel">
+          <div className="admin-panel__header">
+            <h3>Carga masiva de productos</h3>
+            <span>CSV</span>
+          </div>
+          <form className="admin-form" onSubmit={handleCsvUpload}>
+            <label>
+              <span>Seleccionar archivo CSV</span>
+              <input
+                accept=".csv"
+                onChange={handleFileChange}
+                ref={fileInputRef}
+                required
+                type="file"
+              />
+            </label>
+            <div className="admin-actions-row">
+              <Button disabled={isUploading || !csvFile} type="submit">
+                {isUploading ? "Cargando..." : "Importar productos"}
+              </Button>
+              <Button
+                onClick={handleDownloadSample}
+                type="button"
+                variant="secondary"
+              >
+                Descargar muestra
+              </Button>
+            </div>
+          </form>
+
+          {csvSuccess && (
+            <div
+              className="admin-alert admin-alert--success"
+              style={{
+                margin: "0 1rem 1rem",
+                fontSize: "0.85rem",
+              }}
+            >
+              {csvSuccess}
+            </div>
+          )}
+
+          {csvErrors.length > 0 && (
+            <div
+              className="admin-alert admin-alert--error"
+              style={{
+                margin: "0 1rem 1rem",
+                maxHeight: "250px",
+                overflowY: "auto",
+                fontSize: "0.85rem",
+              }}
+            >
+              <p style={{ margin: "0 0 0.5rem 0", fontWeight: "bold" }}>
+                Errores en el archivo:
+              </p>
+              <ul style={{ margin: 0, paddingLeft: "1.2rem" }}>
+                {csvErrors.map((err, i) => (
+                  <li key={i} style={{ marginBottom: "0.25rem" }}>
+                    <strong>Línea {err.linea} (SKU: {err.sku}):</strong>{" "}
+                    {err.errores.join(", ")}
+                  </li>
+                ))}
+              </ul>
+            </div>
+          )}
         </section>
 
         <section className="admin-panel admin-panel--users">

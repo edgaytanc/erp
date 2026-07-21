@@ -1,10 +1,17 @@
 from __future__ import annotations
 
+import csv
+import io
+from decimal import Decimal, InvalidOperation
+
+from django.db import transaction
 from django.db.models import Count, F, Max, Q, Sum
-from rest_framework import mixins, viewsets
+from django.http import HttpResponse
+from rest_framework import mixins, status, viewsets
 from rest_framework.decorators import action
 from rest_framework.filters import OrderingFilter
 from rest_framework.pagination import PageNumberPagination
+from rest_framework.parsers import MultiPartParser, FormParser
 from rest_framework.response import Response
 
 from apps.accounts.permissions import ModuleRolePermission
@@ -105,6 +112,266 @@ class ProductViewSet(viewsets.ModelViewSet):
         product.is_active = False
         product.save(update_fields=["is_active", "updated_at"])
         return Response(status=204)
+
+    @action(
+        detail=False,
+        methods=["post"],
+        url_path="import-csv",
+        parser_classes=[MultiPartParser, FormParser],
+    )
+    def import_csv(self, request):
+        csv_file = request.FILES.get("file")
+        if not csv_file:
+            return Response(
+                {"error": "No se proporcionó ningún archivo."},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        if not csv_file.name.endswith(".csv"):
+            return Response(
+                {"error": "El archivo debe tener formato CSV (.csv)."},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        try:
+            file_data = csv_file.read().decode("utf-8-sig")
+            io_string = io.StringIO(file_data)
+            reader = csv.DictReader(io_string)
+        except Exception as e:
+            return Response(
+                {"error": f"Error al leer el archivo: {str(e)}"},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        required_cols = {"sku", "name", "sale_price"}
+        headers = {h.strip().lower() for h in reader.fieldnames if h} if reader.fieldnames else set()
+
+        missing_cols = required_cols - headers
+        if missing_cols:
+            return Response(
+                {
+                    "error": f"El archivo CSV no contiene las columnas obligatorias: {', '.join(missing_cols)}"
+                },
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        errors = []
+        products_to_save = []
+        seen_skus = set()
+        seen_barcodes = set()
+
+        for index, row in enumerate(reader, start=2):
+            row_sku = (row.get("sku") or "").strip().upper()
+            row_name = (row.get("name") or "").strip()
+            row_sale_price_str = (row.get("sale_price") or "").strip()
+            row_cost_price_str = (row.get("cost_price") or "0.00").strip()
+            row_min_stock_str = (row.get("min_stock") or "0.00").strip()
+            row_barcode = (row.get("barcode") or "").strip()
+            row_description = (row.get("description") or "").strip()
+            row_category_name = (row.get("category") or row.get("category_name") or "").strip()
+            row_is_active_str = (row.get("is_active") or "true").strip().lower()
+
+            row_errors = []
+            if not row_sku:
+                row_errors.append("El campo 'sku' es obligatorio.")
+            elif row_sku in seen_skus:
+                row_errors.append(f"El SKU '{row_sku}' está duplicado en el archivo.")
+            else:
+                seen_skus.add(row_sku)
+
+            if not row_name:
+                row_errors.append("El campo 'name' es obligatorio.")
+
+            sale_price = None
+            try:
+                sale_price = Decimal(row_sale_price_str)
+                if sale_price < 0:
+                    row_errors.append("El campo 'sale_price' no puede ser negativo.")
+            except (ValueError, InvalidOperation):
+                row_errors.append("El campo 'sale_price' debe ser un número válido.")
+
+            cost_price = Decimal("0.00")
+            if row_cost_price_str:
+                try:
+                    cost_price = Decimal(row_cost_price_str)
+                    if cost_price < 0:
+                        row_errors.append("El campo 'cost_price' no puede ser negativo.")
+                except (ValueError, InvalidOperation):
+                    row_errors.append("El campo 'cost_price' debe ser un número válido.")
+
+            min_stock = Decimal("0.00")
+            if row_min_stock_str:
+                try:
+                    min_stock = Decimal(row_min_stock_str)
+                    if min_stock < 0:
+                        row_errors.append("El campo 'min_stock' no puede ser negativo.")
+                except (ValueError, InvalidOperation):
+                    row_errors.append("El campo 'min_stock' debe ser un número válido.")
+
+            if row_barcode:
+                if row_barcode in seen_barcodes:
+                    row_errors.append(f"El código de barras '{row_barcode}' está duplicado en el archivo.")
+                else:
+                    seen_barcodes.add(row_barcode)
+                    conflicting_product = (
+                        Product.objects.filter(barcode=row_barcode).exclude(sku=row_sku).first()
+                    )
+                    if conflicting_product:
+                        row_errors.append(
+                            f"El código de barras '{row_barcode}' ya está registrado en el producto '{conflicting_product.sku}'."
+                        )
+
+            is_active = row_is_active_str not in ("false", "0", "no", "inactive")
+
+            if row_errors:
+                errors.append({"linea": index, "sku": row_sku or "N/A", "errores": row_errors})
+            else:
+                products_to_save.append(
+                    {
+                        "sku": row_sku,
+                        "name": row_name,
+                        "sale_price": sale_price,
+                        "cost_price": cost_price,
+                        "min_stock": min_stock,
+                        "barcode": row_barcode or None,
+                        "description": row_description,
+                        "category_name": row_category_name,
+                        "is_active": is_active,
+                    }
+                )
+
+        if errors:
+            return Response(
+                {"error": "El archivo contiene errores de validación.", "detalles": errors},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        if not products_to_save:
+            return Response(
+                {"error": "El archivo no contiene filas de datos para procesar."},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        try:
+            with transaction.atomic():
+                imported_count = 0
+                updated_count = 0
+                category_cache = {}
+
+                for item in products_to_save:
+                    category_obj = None
+                    c_name = item["category_name"]
+                    if c_name:
+                        if c_name not in category_cache:
+                            cat = Category.objects.filter(name__iexact=c_name).first()
+                            if not cat:
+                                cat = Category.objects.create(name=c_name)
+                            category_cache[c_name] = cat
+                        category_obj = category_cache[c_name]
+
+                    product, created = Product.objects.get_or_create(
+                        sku=item["sku"],
+                        defaults={
+                            "name": item["name"],
+                            "sale_price": item["sale_price"],
+                            "cost_price": item["cost_price"],
+                            "min_stock": item["min_stock"],
+                            "barcode": item["barcode"],
+                            "description": item["description"],
+                            "category": category_obj,
+                            "is_active": item["is_active"],
+                        },
+                    )
+
+                    if not created:
+                        product.name = item["name"]
+                        product.sale_price = item["sale_price"]
+                        product.cost_price = item["cost_price"]
+                        product.min_stock = item["min_stock"]
+                        product.barcode = item["barcode"]
+                        product.description = item["description"]
+                        if category_obj:
+                            product.category = category_obj
+                        product.is_active = item["is_active"]
+                        product.save()
+                        updated_count += 1
+                    else:
+                        imported_count += 1
+
+            return Response(
+                {
+                    "mensaje": "Carga masiva finalizada con éxito.",
+                    "creados": imported_count,
+                    "actualizados": updated_count,
+                },
+                status=status.HTTP_200_OK,
+            )
+
+        except Exception as e:
+            return Response(
+                {"error": f"Error al procesar la base de datos: {str(e)}"},
+                status=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            )
+
+    @action(detail=False, methods=["get"], url_path="sample-csv")
+    def sample_csv(self, request):
+        response = HttpResponse(content_type="text/csv")
+        response["Content-Disposition"] = 'attachment; filename="productos_muestra.csv"'
+        response.write(b"\xef\xbb\xbf")
+        writer = csv.writer(response)
+        writer.writerow(
+            [
+                "sku",
+                "name",
+                "description",
+                "sale_price",
+                "cost_price",
+                "min_stock",
+                "category",
+                "barcode",
+                "is_active",
+            ]
+        )
+        writer.writerow(
+            [
+                "PROD001",
+                "Coca Cola 350ml",
+                "Lata de Coca Cola de 350ml",
+                "1.50",
+                "1.00",
+                "10.00",
+                "Bebidas",
+                "7401005123456",
+                "true",
+            ]
+        )
+        writer.writerow(
+            [
+                "PROD002",
+                "Papas Fritas Naturales",
+                "Bolsa de papas fritas naturales 50g",
+                "2.00",
+                "1.30",
+                "15.00",
+                "Snacks",
+                "7401005123457",
+                "true",
+            ]
+        )
+        writer.writerow(
+            [
+                "PROD003",
+                "Agua Purificada 500ml",
+                "Botella de agua purificada",
+                "1.00",
+                "0.50",
+                "20.00",
+                "Bebidas",
+                "",
+                "true",
+            ]
+        )
+        return response
 
 
 class StockMovementViewSet(viewsets.ReadOnlyModelViewSet):
