@@ -1,5 +1,6 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import { Link } from "react-router-dom";
+import { useReactToPrint } from "react-to-print";
 
 import { CancelSaleModal } from "./CancelSaleModal";
 import { CartPanel } from "./CartPanel";
@@ -22,6 +23,29 @@ export function PosShell({
   const [isCancelModalOpen, setIsCancelModalOpen] = useState(false);
   const [isCashPaymentModalOpen, setIsCashPaymentModalOpen] = useState(false);
   const [activeTab, setActiveTab] = useState("search");
+
+  const ticketRef = useRef(null);
+  const lastPrintedSaleIdRef = useRef(null);
+
+  const handlePrint = useReactToPrint({
+    contentRef: ticketRef,
+  });
+
+  // Automatically trigger printing once sale registration succeeds and DOM finishes rendering
+  useEffect(() => {
+    const saleId = state.ticketData?.id || state.ticketData?.sale?.id;
+    if (
+      state.ticketData &&
+      state.lastConfirmedSale?.status === "CONFIRMED" &&
+      saleId &&
+      lastPrintedSaleIdRef.current !== saleId
+    ) {
+      if (ticketRef.current) {
+        lastPrintedSaleIdRef.current = saleId;
+        handlePrint();
+      }
+    }
+  }, [state.ticketData, state.lastConfirmedSale, handlePrint]);
 
   const hasOpenCashRegister = Boolean(state.cashRegisterSession);
   const canConfirm =
@@ -189,7 +213,7 @@ export function PosShell({
             paymentMethod={state.paymentMethod}
           />
 
-          <TicketPreview ticket={state.ticketData} />
+          <TicketPreview ticket={state.ticketData} ref={ticketRef} />
 
           <SaleActions
             canCancel={canCancel}
@@ -197,6 +221,7 @@ export function PosShell({
             onCancel={() => setIsCancelModalOpen(true)}
             onClear={actions.clearSale}
             onConfirm={handleConfirmClick}
+            onPrint={state.ticketData ? handlePrint : null}
           />
         </div>
       </div>

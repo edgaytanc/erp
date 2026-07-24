@@ -43,6 +43,7 @@ const emptySettingsForm = {
   sale_void_window_minutes: 10,
   max_cash_sessions_per_day: 1,
   is_active: true,
+  logo_url: "",
 };
 
 const emptyBranchForm = {
@@ -92,6 +93,7 @@ function toSettingsForm(settings) {
         sale_void_window_minutes: settings.sale_void_window_minutes ?? 10,
         max_cash_sessions_per_day: settings.max_cash_sessions_per_day ?? 1,
         is_active: Boolean(settings.is_active),
+        logo_url: settings.logo_url || "",
       }
     : emptySettingsForm;
 }

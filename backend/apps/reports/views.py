@@ -598,6 +598,57 @@ class PurchasedProductsReportView(AdminReportView):
         )
 
 
+class SupplierDetailsReportView(AdminReportView):
+    def get(self, request):
+        date_from, date_to = self.get_date_range(request)
+        qs = PurchaseItem.objects.select_related(
+            "purchase", "purchase__branch", "purchase__supplier", "product"
+        ).filter(purchase__status=PurchaseStatus.CONFIRMED)
+        qs = self.apply_date_filter(qs, "purchase__purchased_at", date_from, date_to)
+        qs = self.apply_branch_filter(qs, "purchase__branch")
+
+        from django.db.models.functions import TruncDate
+
+        rows = (
+            qs.annotate(date=TruncDate("purchase__purchased_at"))
+            .values("date", "purchase__supplier__name", "product__name")
+            .annotate(
+                total_qty=Sum("qty"),
+                total_cost=Sum("subtotal"),
+            )
+            .order_by("-date", "purchase__supplier__name", "product__name")[:500]
+        )
+
+        totals = qs.aggregate(
+            total_qty=Coalesce(Sum("qty"), Value(ZERO), output_field=DecimalField()),
+            total_cost=Coalesce(Sum("subtotal"), Value(ZERO), output_field=DecimalField()),
+            products_count=Count("product", distinct=True),
+        )
+
+        return Response(
+            {
+                "filters": {"date_from": date_from, "date_to": date_to},
+                "scope": self.branch_scope(request),
+                "generated_at": timezone.now().isoformat(),
+                "summary": {
+                    "total_cost": self.money(totals["total_cost"]),
+                    "total_qty": self.money(totals["total_qty"]),
+                    "products_count": totals["products_count"],
+                },
+                "items": [
+                    {
+                        "purchased_at": row["date"].isoformat() if row["date"] else "Sin fecha",
+                        "supplier_name": row["purchase__supplier__name"] or "Sin proveedor",
+                        "product_name": row["product__name"] or "Producto sin nombre",
+                        "qty": self.money(row["total_qty"]),
+                        "total_cost": self.money(row["total_cost"]),
+                    }
+                    for row in rows
+                ],
+            }
+        )
+
+
 class PurchasesVsSalesReportView(AdminReportView):
     def get(self, request):
         date_from, date_to = self.get_date_range(request)

@@ -50,6 +50,11 @@ export async function getPurchasedProductsReport(params = {}) {
   return response.data;
 }
 
+export async function getSupplierDetailsReport(params = {}) {
+  const response = await api.get("/reports/purchases/supplier-details/", { params });
+  return response.data;
+}
+
 export async function getPurchasesVsSalesReport(params = {}) {
   const response = await api.get("/reports/purchases-vs-sales/", { params });
   return response.data;

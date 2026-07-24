@@ -281,5 +281,38 @@ class ReportsApiTestCase(APITestCase):
         self.assertEqual(response.data["items"][0]["sku"], "ARROZ-001")
         self.assertAlmostEqual(response.data["items"][0]["margin"], 68.0)
 
+    def test_supplier_details_report(self):
+        self.authenticate_admin()
+        purchase_response = self.client.post(
+            reverse("purchases-list"),
+            {
+                "branch": str(self.branch.id),
+                "supplier": str(self.supplier.id),
+                "invoice_number": "FAC-001",
+                "items": [
+                    {
+                        "product": str(self.product.id),
+                        "qty": "3.000",
+                        "unit_cost": "9.50",
+                    }
+                ],
+            },
+            format="json",
+        )
+        self.client.post(reverse("purchases-confirm", args=[purchase_response.data["id"]]), {}, format="json")
+
+        response = self.client.get(reverse("reports-purchases-supplier-details"))
+
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.assertEqual(response.data["summary"]["total_cost"], "28.50")
+        self.assertEqual(response.data["summary"]["total_qty"], "3.00")
+        self.assertEqual(response.data["summary"]["products_count"], 1)
+        self.assertEqual(len(response.data["items"]), 1)
+        self.assertEqual(response.data["items"][0]["supplier_name"], "Proveedor Demo")
+        self.assertEqual(response.data["items"][0]["product_name"], "Arroz")
+        self.assertEqual(response.data["items"][0]["qty"], "3.00")
+        self.assertEqual(response.data["items"][0]["total_cost"], "28.50")
+
+
 
 

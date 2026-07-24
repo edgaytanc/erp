@@ -16,6 +16,7 @@ from .views import (
     SalesByCategoryReportView,
     SalesByProductReportView,
     SalesReportView,
+    SupplierDetailsReportView,
     TopSellingProductsReportView,
 )
 
@@ -61,6 +62,11 @@ urlpatterns = [
         "reports/purchases/products/",
         PurchasedProductsReportView.as_view(),
         name="reports-purchased-products",
+    ),
+    path(
+        "reports/purchases/supplier-details/",
+        SupplierDetailsReportView.as_view(),
+        name="reports-purchases-supplier-details",
     ),
     path(
         "reports/purchases-vs-sales/",

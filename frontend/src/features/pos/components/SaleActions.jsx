@@ -4,6 +4,7 @@ export function SaleActions({
   onCancel,
   onClear,
   onConfirm,
+  onPrint,
 }) {
   return (
     <div className="action-buttons">
@@ -28,7 +29,8 @@ export function SaleActions({
       </button>
       <button
         className="btn btn-success"
-        onClick={() => window.print()}
+        onClick={onPrint}
+        disabled={!onPrint}
         type="button"
       >
         Imprimir

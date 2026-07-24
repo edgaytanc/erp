@@ -1,6 +1,6 @@
 import { formatMoney } from "../utils/money";
 
-export function TicketPreview({ ticket }) {
+export function TicketPreview({ ticket, ref }) {
   if (!ticket) {
     return (
       <div className="ticket-section">
@@ -21,6 +21,7 @@ export function TicketPreview({ ticket }) {
   const companyPhone = ticket.company_phone;
   const companyAddress = ticket.company_address;
   const receiptHeader = ticket.receipt_header;
+  const logoUrl = ticket.logo_url;
   const receiptFooter = ticket.receipt_footer || "Gracias por su compra";
   const subtotal = ticket.subtotal || 0;
   const tax = ticket.tax || 0;
@@ -31,8 +32,11 @@ export function TicketPreview({ ticket }) {
 
   return (
     <div className="ticket-section">
-      <section className="pos-ticket">
+      <section ref={ref} className="pos-ticket">
         <div className="pos-ticket__header">
+          {logoUrl ? (
+            <img className="pos-ticket__logo" src={logoUrl} alt="Logo" />
+          ) : null}
           <strong>{companyName}</strong>
           {branchName ? <span>{branchName}</span> : null}
           {companyTaxId ? <span>NIT {companyTaxId}</span> : null}

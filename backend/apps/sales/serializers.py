@@ -282,6 +282,7 @@ class SaleTicketSerializer(serializers.ModelSerializer):
     receipt_header = serializers.CharField(source="branch.company.receipt_header", read_only=True)
     receipt_footer = serializers.CharField(source="branch.company.receipt_footer", read_only=True)
     logo = serializers.CharField(source="branch.company.logo", read_only=True)
+    logo_url = serializers.SerializerMethodField()
     items = SaleItemSerializer(many=True, read_only=True)
 
     class Meta:
@@ -306,5 +307,14 @@ class SaleTicketSerializer(serializers.ModelSerializer):
             "receipt_header",
             "receipt_footer",
             "logo",
+            "logo_url",
             "items",
         ]
+
+    def get_logo_url(self, obj):
+        try:
+            if hasattr(obj.branch.company, "settings") and obj.branch.company.settings:
+                return obj.branch.company.settings.logo_url
+        except Exception:
+            pass
+        return ""

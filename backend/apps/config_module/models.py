@@ -61,6 +61,13 @@ class CompanySettings(TimeStampedModel):
         help_text="Número máximo de aperturas/cierres de caja por día.",
     )
 
+    logo_url = models.URLField(
+        max_length=512,
+        blank=True,
+        default="",
+        help_text="URL del logo de la empresa para visualización en el ticket/recibo.",
+    )
+
     is_active = models.BooleanField(default=True, db_index=True)
 
     class Meta:
