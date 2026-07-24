@@ -1,9 +1,13 @@
 import { useEffect, useMemo, useState } from "react";
 import { useNavigate } from "react-router-dom";
+import { Menu } from "lucide-react";
 
 import { useAuth } from "../../contexts/AuthContext";
 import { Button } from "../common/Button";
-import { listPurchases, unwrapResults } from "../../features/purchases/api/purchasesApi";
+import {
+  listPurchases,
+  unwrapResults,
+} from "../../features/purchases/api/purchasesApi";
 
 const ROLE_LABELS = {
   admin: "Administrador",
@@ -11,7 +15,7 @@ const ROLE_LABELS = {
   sales: "Vendedor",
 };
 
-export function AppHeader() {
+export function AppHeader({ isMobileOpen, setIsMobileOpen }) {
   const navigate = useNavigate();
   const { user, logout } = useAuth();
   const [pendingPurchases, setPendingPurchases] = useState([]);
@@ -20,7 +24,10 @@ export function AppHeader() {
   const isAdmin = user?.role === "admin";
 
   const fullName = useMemo(() => {
-    const name = [user?.first_name, user?.last_name].filter(Boolean).join(" ").trim();
+    const name = [user?.first_name, user?.last_name]
+      .filter(Boolean)
+      .join(" ")
+      .trim();
     return name || user?.username || "Usuario";
   }, [user]);
 
@@ -57,14 +64,26 @@ export function AppHeader() {
 
   return (
     <header className="app-header">
-      <div>
-        <h1 className="app-header__title">ERP Web</h1>
-        <p className="app-header__subtitle">Sistema de gestión de empresas</p>
+      <div className="app-header__left">
+        <button
+          className="app-header__mobile-toggle"
+          onClick={() => setIsMobileOpen(!isMobileOpen)}
+          aria-label={isMobileOpen ? "Cerrar menú" : "Abrir menú"}
+        >
+          <Menu size={24} />
+        </button>
+        <div>
+          <h1 className="app-header__title">ERP Web</h1>
+          <p className="app-header__subtitle">Sistema de gestión de empresas</p>
+        </div>
       </div>
 
       <div className="app-header__meta">
         {isAdmin && (
-          <div className="app-header__notifications" style={{ position: "relative" }}>
+          <div
+            className="app-header__notifications"
+            style={{ position: "relative" }}
+          >
             <Button
               variant="secondary"
               onClick={() => setShowNotifications(!showNotifications)}
@@ -114,15 +133,28 @@ export function AppHeader() {
               >
                 <div
                   className="card__header"
-                  style={{ padding: "0.8rem 1rem", borderBottom: "1px solid #e5edf7" }}
+                  style={{
+                    padding: "0.8rem 1rem",
+                    borderBottom: "1px solid #e5edf7",
+                  }}
                 >
-                  <h4 className="card__title" style={{ fontSize: "0.95rem", margin: 0 }}>
+                  <h4
+                    className="card__title"
+                    style={{ fontSize: "0.95rem", margin: 0 }}
+                  >
                     Órdenes DRAFT Pendientes
                   </h4>
                 </div>
                 <div className="card__body" style={{ padding: "0.5rem 1rem" }}>
                   {pendingPurchases.length === 0 ? (
-                    <p style={{ margin: "1rem 0", color: "#64748b", textAlign: "center", fontSize: "0.9rem" }}>
+                    <p
+                      style={{
+                        margin: "1rem 0",
+                        color: "#64748b",
+                        textAlign: "center",
+                        fontSize: "0.9rem",
+                      }}
+                    >
                       No hay órdenes pendientes.
                     </p>
                   ) : (
@@ -136,9 +168,21 @@ export function AppHeader() {
                           textAlign: "left",
                         }}
                       >
-                        <div style={{ display: "flex", justifyContent: "space-between", fontWeight: "600" }}>
-                          <span>Factura: {purchase.invoice_number || String(purchase.id).slice(0, 8)}</span>
-                          <span style={{ color: "#2563eb" }}>Q {Number(purchase.total_cost || 0).toFixed(2)}</span>
+                        <div
+                          style={{
+                            display: "flex",
+                            justifyContent: "space-between",
+                            fontWeight: "600",
+                          }}
+                        >
+                          <span>
+                            Factura:{" "}
+                            {purchase.invoice_number ||
+                              String(purchase.id).slice(0, 8)}
+                          </span>
+                          <span style={{ color: "#2563eb" }}>
+                            Q {Number(purchase.total_cost || 0).toFixed(2)}
+                          </span>
                         </div>
                         <div style={{ color: "#64748b", marginTop: "0.15rem" }}>
                           Sucursal: {purchase.branch_name || "N/A"}
@@ -155,7 +199,12 @@ export function AppHeader() {
                       setShowNotifications(false);
                       navigate("/purchases");
                     }}
-                    style={{ width: "100%", marginTop: "0.75rem", padding: "0.5rem", fontSize: "0.85rem" }}
+                    style={{
+                      width: "100%",
+                      marginTop: "0.75rem",
+                      padding: "0.5rem",
+                      fontSize: "0.85rem",
+                    }}
                   >
                     Ir a Compras
                   </Button>

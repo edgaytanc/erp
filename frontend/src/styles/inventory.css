@@ -89,6 +89,105 @@
   align-items: start;
 }
 
+/* Tabs container and button styles */
+.inventory-tabs {
+  display: flex;
+  gap: 0.5rem;
+  background: #f1f5f9;
+  padding: 0.35rem;
+  border-radius: 0.75rem;
+  border: 1px solid #e2e8f0;
+  margin-bottom: 1.25rem;
+  width: max-content;
+  align-self: start;
+}
+
+@media (max-width: 600px) {
+  .inventory-tabs {
+    width: 100%;
+    box-sizing: border-box;
+  }
+
+  .inventory-tab {
+    flex: 1;
+    justify-content: center;
+  }
+}
+
+.inventory-tab {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.6rem 1.2rem;
+  border: none;
+  background: transparent;
+  border-radius: 0.5rem;
+  font-weight: 600;
+  font-size: 0.95rem;
+  color: #64748b;
+  cursor: pointer;
+  transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+.inventory-tab:hover {
+  color: #0f172a;
+  background: rgba(255, 255, 255, 0.5);
+}
+
+.inventory-tab.active {
+  color: #2563eb;
+  background: #ffffff;
+  box-shadow:
+    0 4px 6px -1px rgba(0, 0, 0, 0.08),
+    0 2px 4px -1px rgba(0, 0, 0, 0.04);
+}
+
+/* Categories Grid */
+.categories-grid {
+  display: grid;
+  grid-template-columns: 380px minmax(0, 1fr);
+  gap: 1rem;
+  align-items: start;
+}
+
+/* Tables and logs */
+.inventory-table-container {
+  width: 100%;
+  overflow-x: auto;
+  border: 1px solid #edf2f7;
+  border-radius: 0.5rem;
+  background: #ffffff;
+}
+
+.inventory-table {
+  width: 100%;
+  border-collapse: collapse;
+  text-align: left;
+  font-size: 0.95rem;
+}
+
+.inventory-table th {
+  background: #f8fafc;
+  padding: 0.75rem 1rem;
+  font-weight: 700;
+  color: #475569;
+  border-bottom: 1px solid #edf2f7;
+}
+
+.inventory-table td {
+  padding: 0.85rem 1rem;
+  border-bottom: 1px solid #edf2f7;
+  color: #0f172a;
+}
+
+.inventory-table tr:last-child td {
+  border-bottom: none;
+}
+
+.inventory-table tr:hover td {
+  background: #f8fafc;
+}
+
 .inventory-panel__header {
   display: flex;
   justify-content: space-between;
@@ -213,7 +312,8 @@
 }
 
 @media (max-width: 1120px) {
-  .inventory-grid {
+  .inventory-grid,
+  .categories-grid {
     grid-template-columns: 1fr;
   }
 

@@ -46,13 +46,20 @@ export function TicketPreview({ ticket }) {
           <span>Estado</span>
           <strong>{status}</strong>
           <span>Pago</span>
-          <strong>{paymentMethod === "CASH" ? "Efectivo" : paymentMethod}</strong>
+          <strong>
+            {paymentMethod === "CASH" ? "Efectivo" : paymentMethod}
+          </strong>
           <span>Fecha</span>
-          {soldAt ? <span>{new Date(soldAt).toLocaleString("es-GT")}</span> : null}
+          {soldAt ? (
+            <span>{new Date(soldAt).toLocaleString("es-GT")}</span>
+          ) : null}
         </div>
         <div className="pos-ticket__items">
           {items.map((item) => (
-            <div className="pos-ticket__item" key={item.id || item.productId || item.product}>
+            <div
+              className="pos-ticket__item"
+              key={item.id || item.productId || item.product}
+            >
               <div>
                 <span>{item.product_name || item.name}</span>
                 <small>
@@ -62,7 +69,9 @@ export function TicketPreview({ ticket }) {
               </div>
               <strong>
                 {formatMoney(
-                  item.subtotal || Number(item.unit_price || item.unitPrice || 0) * Number(item.qty || item.quantity),
+                  item.subtotal ||
+                    Number(item.unit_price || item.unitPrice || 0) *
+                      Number(item.qty || item.quantity),
                 )}
               </strong>
             </div>

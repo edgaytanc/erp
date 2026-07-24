@@ -130,19 +130,22 @@ export function PurchasesPage() {
   const { user } = useAuth();
   const branchId = user?.branch || "";
   const branchName = user?.branch_name || "";
-  
+
+  // Tabs state
+  const [activeTab, setActiveTab] = useState("new_purchase");
+
   // Suppliers states
   const [suppliers, setSuppliers] = useState([]);
   const [allSuppliers, setAllSuppliers] = useState([]);
-  
+
   // Products and purchases states
   const [products, setProducts] = useState([]);
   const [recentPurchases, setRecentPurchases] = useState([]);
   const [draftPurchases, setDraftPurchases] = useState([]);
-  
+
   // Quick supplier creation form
   const [supplierForm, setSupplierForm] = useState(emptySupplierForm);
-  
+
   // Modal supplier form
   const [isSupplierModalOpen, setIsSupplierModalOpen] = useState(false);
   const [editingSupplierId, setEditingSupplierId] = useState(null);
@@ -166,7 +169,12 @@ export function PurchasesPage() {
   const [success, setSuccess] = useState(null);
 
   const totalCost = useMemo(
-    () => items.reduce((sum, item) => sum + Number(item.qty || 0) * Number(item.unit_cost || 0), 0),
+    () =>
+      items.reduce(
+        (sum, item) =>
+          sum + Number(item.qty || 0) * Number(item.unit_cost || 0),
+        0,
+      ),
     [items],
   );
 
@@ -175,9 +183,19 @@ export function PurchasesPage() {
     setError(null);
 
     try {
-      const [suppliersResponse, productsResponse, purchasesResponse, draftsResponse] = await Promise.all([
+      const [
+        suppliersResponse,
+        productsResponse,
+        purchasesResponse,
+        draftsResponse,
+      ] = await Promise.all([
         listSuppliers(),
-        listProducts({ q: nextSearch, is_active: true, page_size: 30, ordering: "name" }),
+        listProducts({
+          q: nextSearch,
+          is_active: true,
+          page_size: 30,
+          ordering: "name",
+        }),
         listPurchases({ page_size: 10, branch: branchId }),
         listDraftPurchases({ branch: branchId }),
       ]);
@@ -189,7 +207,9 @@ export function PurchasesPage() {
       setRecentPurchases(unwrapResults(purchasesResponse));
       setDraftPurchases(unwrapResults(draftsResponse));
     } catch (requestError) {
-      setError(extractApiErrorMessage(requestError, "No se pudo cargar compras."));
+      setError(
+        extractApiErrorMessage(requestError, "No se pudo cargar compras."),
+      );
     } finally {
       setIsLoading(false);
     }
@@ -238,13 +258,19 @@ export function PurchasesPage() {
         address: supplierForm.address.trim(),
       });
 
-      setAllSuppliers((current) => [...current, supplier].sort((a, b) => a.name.localeCompare(b.name)));
-      setSuppliers((current) => [...current, supplier].sort((a, b) => a.name.localeCompare(b.name)));
+      setAllSuppliers((current) =>
+        [...current, supplier].sort((a, b) => a.name.localeCompare(b.name)),
+      );
+      setSuppliers((current) =>
+        [...current, supplier].sort((a, b) => a.name.localeCompare(b.name)),
+      );
       setSupplierId(supplier.id);
       setSupplierForm(emptySupplierForm);
       setSuccess("Proveedor creado.");
     } catch (requestError) {
-      setError(extractApiErrorMessage(requestError, "No se pudo crear el proveedor."));
+      setError(
+        extractApiErrorMessage(requestError, "No se pudo crear el proveedor."),
+      );
     } finally {
       setIsSavingSupplier(false);
     }
@@ -294,18 +320,24 @@ export function PurchasesPage() {
     try {
       if (editingSupplierId) {
         const updated = await updateSupplier(editingSupplierId, payload);
-        
+
         setAllSuppliers((current) =>
-          current.map((s) => (s.id === updated.id ? updated : s)).sort((a, b) => a.name.localeCompare(b.name))
+          current
+            .map((s) => (s.id === updated.id ? updated : s))
+            .sort((a, b) => a.name.localeCompare(b.name)),
         );
-        
+
         setSuppliers((current) => {
           if (updated.is_active) {
             const exists = current.some((s) => s.id === updated.id);
             if (exists) {
-              return current.map((s) => (s.id === updated.id ? updated : s)).sort((a, b) => a.name.localeCompare(b.name));
+              return current
+                .map((s) => (s.id === updated.id ? updated : s))
+                .sort((a, b) => a.name.localeCompare(b.name));
             } else {
-              return [...current, updated].sort((a, b) => a.name.localeCompare(b.name));
+              return [...current, updated].sort((a, b) =>
+                a.name.localeCompare(b.name),
+              );
             }
           } else {
             return current.filter((s) => s.id !== updated.id);
@@ -317,29 +349,36 @@ export function PurchasesPage() {
         setModalSupplierForm(emptySupplierForm);
       } else {
         const created = await createSupplier(payload);
-        
+
         setAllSuppliers((current) =>
-          [...current, created].sort((a, b) => a.name.localeCompare(b.name))
+          [...current, created].sort((a, b) => a.name.localeCompare(b.name)),
         );
-        
+
         if (created.is_active) {
           setSuppliers((current) =>
-            [...current, created].sort((a, b) => a.name.localeCompare(b.name))
+            [...current, created].sort((a, b) => a.name.localeCompare(b.name)),
           );
         }
-        
+
         setModalSuccess("Proveedor creado correctamente.");
         setModalSupplierForm(emptySupplierForm);
       }
     } catch (requestError) {
-      setModalError(extractApiErrorMessage(requestError, "No se pudo guardar el proveedor."));
+      setModalError(
+        extractApiErrorMessage(
+          requestError,
+          "No se pudo guardar el proveedor.",
+        ),
+      );
     } finally {
       setIsSavingModalSupplier(false);
     }
   }
 
   async function handleDeleteSupplierClick(supplierId) {
-    if (!window.confirm("¿Estás seguro de que deseas eliminar este proveedor?")) {
+    if (
+      !window.confirm("¿Estás seguro de que deseas eliminar este proveedor?")
+    ) {
       return;
     }
 
@@ -348,23 +387,30 @@ export function PurchasesPage() {
 
     try {
       await deleteSupplier(supplierId);
-      
+
       setAllSuppliers((current) => current.filter((s) => s.id !== supplierId));
       setSuppliers((current) => current.filter((s) => s.id !== supplierId));
-      
+
       if (editingSupplierId === supplierId) {
         setEditingSupplierId(null);
         setModalSupplierForm(emptySupplierForm);
       }
-      
+
       setModalSuccess("Proveedor eliminado correctamente.");
     } catch (requestError) {
-      setModalError(extractApiErrorMessage(requestError, "No se pudo eliminar el proveedor."));
+      setModalError(
+        extractApiErrorMessage(
+          requestError,
+          "No se pudo eliminar el proveedor.",
+        ),
+      );
     }
   }
 
   function handleAddItem() {
-    const product = products.find((candidate) => candidate.id === itemForm.product);
+    const product = products.find(
+      (candidate) => candidate.id === itemForm.product,
+    );
 
     if (!product) {
       setError("Selecciona un producto.");
@@ -440,7 +486,9 @@ export function PurchasesPage() {
       setSuccess("Compra DRAFT creada. Confirma para cargar stock.");
       await loadPurchasesData(productSearch);
     } catch (requestError) {
-      setError(extractApiErrorMessage(requestError, "No se pudo crear la compra."));
+      setError(
+        extractApiErrorMessage(requestError, "No se pudo crear la compra."),
+      );
     } finally {
       setIsSavingPurchase(false);
     }
@@ -464,7 +512,9 @@ export function PurchasesPage() {
       setSuccess("Compra confirmada. Stock inicial cargado.");
       await loadPurchasesData(productSearch);
     } catch (requestError) {
-      setError(extractApiErrorMessage(requestError, "No se pudo confirmar la compra."));
+      setError(
+        extractApiErrorMessage(requestError, "No se pudo confirmar la compra."),
+      );
     } finally {
       setIsConfirming(false);
     }
@@ -474,7 +524,7 @@ export function PurchasesPage() {
     setCreatedPurchase(purchase);
     setSupplierId(purchase.supplier || "");
     setInvoiceNumber(purchase.invoice_number || "");
-    
+
     const mappedItems = (purchase.items || []).map((item) => ({
       product: item.product,
       product_name: item.product_name || "Producto",
@@ -483,8 +533,11 @@ export function PurchasesPage() {
       unit_cost: Number(item.unit_cost).toFixed(2),
     }));
     setItems(mappedItems);
-    setSuccess(`Orden DRAFT ${purchase.invoice_number || String(purchase.id).slice(0, 8)} cargada en el formulario.`);
+    setSuccess(
+      `Orden DRAFT ${purchase.invoice_number || String(purchase.id).slice(0, 8)} cargada en el formulario.`,
+    );
     setError(null);
+    setActiveTab("new_purchase");
   }
 
   async function handleConfirmDraftDirectly(purchaseId) {
@@ -503,7 +556,9 @@ export function PurchasesPage() {
       }
       await loadPurchasesData(productSearch);
     } catch (requestError) {
-      setError(extractApiErrorMessage(requestError, "No se pudo confirmar la compra."));
+      setError(
+        extractApiErrorMessage(requestError, "No se pudo confirmar la compra."),
+      );
     } finally {
       setIsConfirming(false);
     }
@@ -530,72 +585,308 @@ export function PurchasesPage() {
         </div>
       </section>
 
-      {error ? <div className="purchases-alert purchases-alert--error">{error}</div> : null}
-      {success ? <div className="purchases-alert purchases-alert--success">{success}</div> : null}
+      {error ? (
+        <div className="purchases-alert purchases-alert--error">{error}</div>
+      ) : null}
+      {success ? (
+        <div className="purchases-alert purchases-alert--success">
+          {success}
+        </div>
+      ) : null}
 
-      <div className="purchases-grid">
-        <div style={{ display: "grid", gap: "1rem" }}>
-          <section className="purchases-panel">
-            <div className="purchases-panel__header">
-              <h3>Proveedor</h3>
-              <div style={{ display: "flex", gap: "0.5rem", alignItems: "center" }}>
-                <span style={{ fontSize: "0.85rem" }}>{suppliers.length} activos</span>
-                <Button
-                  onClick={() => {
-                    setIsSupplierModalOpen(true);
-                    setModalError(null);
-                    setModalSuccess(null);
+      <div className="purchases-tabs">
+        <button
+          className={`purchases-tab ${activeTab === "new_purchase" ? "active" : ""}`}
+          onClick={() => setActiveTab("new_purchase")}
+        >
+          <svg
+            className="tab-icon"
+            viewBox="0 0 24 24"
+            fill="none"
+            stroke="currentColor"
+            strokeWidth="2"
+          >
+            <path
+              strokeLinecap="round"
+              strokeLinejoin="round"
+              d="M12 4v16m8-8H4"
+            />
+          </svg>
+          Nueva Compra
+        </button>
+        <button
+          className={`purchases-tab ${activeTab === "history" ? "active" : ""}`}
+          onClick={() => setActiveTab("history")}
+        >
+          <svg
+            className="tab-icon"
+            viewBox="0 0 24 24"
+            fill="none"
+            stroke="currentColor"
+            strokeWidth="2"
+          >
+            <path
+              strokeLinecap="round"
+              strokeLinejoin="round"
+              d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2m-3 7h3m-3 4h3m-6-4h.01M9 16h.01"
+            />
+          </svg>
+          Compras Recientes
+        </button>
+      </div>
+
+      {activeTab === "new_purchase" && (
+        <div className="purchases-grid">
+          <div style={{ display: "grid", gap: "1rem" }}>
+            <section className="purchases-panel">
+              <div className="purchases-panel__header">
+                <h3>Proveedor</h3>
+                <div
+                  style={{
+                    display: "flex",
+                    gap: "0.5rem",
+                    alignItems: "center",
                   }}
-                  variant="secondary"
-                  style={{ padding: "0.25rem 0.5rem", fontSize: "0.85rem", minHeight: "auto" }}
                 >
-                  Gestionar Proveedores
-                </Button>
+                  <span style={{ fontSize: "0.85rem" }}>
+                    {suppliers.length} activos
+                  </span>
+                  <Button
+                    onClick={() => {
+                      setIsSupplierModalOpen(true);
+                      setModalError(null);
+                      setModalSuccess(null);
+                    }}
+                    variant="secondary"
+                    style={{
+                      padding: "0.25rem 0.5rem",
+                      fontSize: "0.85rem",
+                      minHeight: "auto",
+                    }}
+                  >
+                    Gestionar Proveedores
+                  </Button>
+                </div>
               </div>
+
+              <form className="supplier-form" onSubmit={handleCreateSupplier}>
+                <label>
+                  <span>Proveedor</span>
+                  <input
+                    onChange={(event) =>
+                      updateSupplierField("name", event.target.value)
+                    }
+                    placeholder="Nombre comercial"
+                    type="text"
+                    value={supplierForm.name}
+                  />
+                </label>
+                <label>
+                  <span>Contacto</span>
+                  <input
+                    onChange={(event) =>
+                      updateSupplierField("contact_name", event.target.value)
+                    }
+                    type="text"
+                    value={supplierForm.contact_name}
+                  />
+                </label>
+                <div className="purchases-form-row">
+                  <label>
+                    <span>Telefono</span>
+                    <input
+                      onChange={(event) =>
+                        updateSupplierField("phone", event.target.value)
+                      }
+                      type="text"
+                      value={supplierForm.phone}
+                    />
+                  </label>
+                  <label>
+                    <span>Direccion</span>
+                    <input
+                      onChange={(event) =>
+                        updateSupplierField("address", event.target.value)
+                      }
+                      type="text"
+                      value={supplierForm.address}
+                    />
+                  </label>
+                </div>
+                <Button
+                  disabled={isSavingSupplier}
+                  type="submit"
+                  variant="secondary"
+                >
+                  Crear proveedor
+                </Button>
+              </form>
+            </section>
+          </div>
+
+          <section className="purchases-panel purchases-panel--entry">
+            <div className="purchases-panel__header">
+              <h3>Entrada de inventario</h3>
+              <span>
+                {isLoading ? "Cargando..." : `${products.length} productos`}
+              </span>
             </div>
 
-            <form className="supplier-form" onSubmit={handleCreateSupplier}>
-              <label>
-                <span>Proveedor</span>
-                <input
-                  onChange={(event) => updateSupplierField("name", event.target.value)}
-                  placeholder="Nombre comercial"
-                  type="text"
-                  value={supplierForm.name}
-                />
-              </label>
-              <label>
-                <span>Contacto</span>
-                <input
-                  onChange={(event) => updateSupplierField("contact_name", event.target.value)}
-                  type="text"
-                  value={supplierForm.contact_name}
-                />
-              </label>
+            <form className="purchase-form" onSubmit={handleCreatePurchase}>
               <div className="purchases-form-row">
                 <label>
-                  <span>Telefono</span>
-                  <input
-                    onChange={(event) => updateSupplierField("phone", event.target.value)}
-                    type="text"
-                    value={supplierForm.phone}
-                  />
+                  <span>Proveedor</span>
+                  <select
+                    onChange={(event) => setSupplierId(event.target.value)}
+                    required
+                    value={supplierId}
+                  >
+                    <option value="">Seleccionar</option>
+                    {suppliers.map((supplier) => (
+                      <option key={supplier.id} value={supplier.id}>
+                        {supplier.name}
+                      </option>
+                    ))}
+                  </select>
                 </label>
                 <label>
-                  <span>Direccion</span>
+                  <span>Factura</span>
                   <input
-                    onChange={(event) => updateSupplierField("address", event.target.value)}
+                    onChange={(event) => setInvoiceNumber(event.target.value)}
+                    placeholder="Opcional"
                     type="text"
-                    value={supplierForm.address}
+                    value={invoiceNumber}
                   />
                 </label>
               </div>
-              <Button disabled={isSavingSupplier} type="submit" variant="secondary">
-                Crear proveedor
-              </Button>
+
+              <div className="purchase-item-picker">
+                <label>
+                  <span>Buscar producto</span>
+                  <input
+                    onChange={(event) => setProductSearch(event.target.value)}
+                    placeholder="SKU o nombre"
+                    type="search"
+                    value={productSearch}
+                  />
+                </label>
+
+                <div className="purchase-item-form">
+                  <label>
+                    <span>Producto</span>
+                    <select
+                      onChange={(event) =>
+                        updateItemField("product", event.target.value)
+                      }
+                      value={itemForm.product}
+                    >
+                      <option value="">Seleccionar producto</option>
+                      {products.map((product) => (
+                        <option key={product.id} value={product.id}>
+                          {product.sku} - {product.name}
+                        </option>
+                      ))}
+                    </select>
+                  </label>
+                  <label>
+                    <span>Cantidad</span>
+                    <input
+                      min="0.001"
+                      onChange={(event) =>
+                        updateItemField("qty", event.target.value)
+                      }
+                      step="0.001"
+                      type="number"
+                      value={itemForm.qty}
+                    />
+                  </label>
+                  <label>
+                    <span>Costo</span>
+                    <input
+                      min="0"
+                      onChange={(event) =>
+                        updateItemField("unit_cost", event.target.value)
+                      }
+                      step="0.01"
+                      type="number"
+                      value={itemForm.unit_cost}
+                    />
+                  </label>
+                  <Button
+                    onClick={handleAddItem}
+                    type="button"
+                    variant="secondary"
+                  >
+                    Agregar
+                  </Button>
+                </div>
+              </div>
+
+              <div className="purchase-items">
+                {items.length === 0 ? (
+                  <div className="purchase-empty">
+                    Agrega productos para crear la entrada.
+                  </div>
+                ) : (
+                  items.map((item) => (
+                    <article className="purchase-item-row" key={item.product}>
+                      <div>
+                        <strong>{item.product_name}</strong>
+                        <span>{item.product_sku}</span>
+                      </div>
+                      <span>{Number(item.qty).toFixed(3)}</span>
+                      <span>Q {Number(item.unit_cost).toFixed(2)}</span>
+                      <strong>
+                        Q{" "}
+                        {(Number(item.qty) * Number(item.unit_cost)).toFixed(2)}
+                      </strong>
+                      <button
+                        onClick={() => removeItem(item.product)}
+                        type="button"
+                      >
+                        Quitar
+                      </button>
+                    </article>
+                  ))
+                )}
+              </div>
+
+              <div className="purchase-summary">
+                <span>Total estimado</span>
+                <strong>Q {totalCost.toFixed(2)}</strong>
+              </div>
+
+              <div className="purchase-actions">
+                <Button
+                  disabled={
+                    !branchId ||
+                    isSavingPurchase ||
+                    createdPurchase?.status === "DRAFT"
+                  }
+                  type="submit"
+                >
+                  Crear DRAFT
+                </Button>
+                <Button
+                  disabled={
+                    !createdPurchase?.id ||
+                    createdPurchase?.status !== "DRAFT" ||
+                    isConfirming
+                  }
+                  onClick={handleConfirmPurchase}
+                  type="button"
+                  variant="secondary"
+                >
+                  Confirmar y cargar stock
+                </Button>
+              </div>
             </form>
           </section>
+        </div>
+      )}
 
+      {activeTab === "history" && (
+        <div className="purchases-grid">
           <section className="purchases-panel">
             <div className="purchases-panel__header">
               <h3>Órdenes Pendientes (DRAFT)</h3>
@@ -607,10 +898,28 @@ export function PurchasesPage() {
                 <div className="purchase-empty">Sin órdenes pendientes.</div>
               ) : (
                 draftPurchases.map((purchase) => (
-                  <article className="recent-purchase-row" key={purchase.id} style={{ display: "flex", flexDirection: "column", alignItems: "stretch", gap: "0.5rem" }}>
-                    <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+                  <article
+                    className="recent-purchase-row"
+                    key={purchase.id}
+                    style={{
+                      display: "flex",
+                      flexDirection: "column",
+                      alignItems: "stretch",
+                      gap: "0.5rem",
+                    }}
+                  >
+                    <div
+                      style={{
+                        display: "flex",
+                        justifyContent: "space-between",
+                        alignItems: "center",
+                      }}
+                    >
                       <div>
-                        <strong>{purchase.invoice_number || String(purchase.id).slice(0, 8)}</strong>
+                        <strong>
+                          {purchase.invoice_number ||
+                            String(purchase.id).slice(0, 8)}
+                        </strong>
                         <small style={{ display: "block", color: "#64748b" }}>
                           {purchase.supplier_name || "Proveedor desconocido"}
                         </small>
@@ -619,17 +928,31 @@ export function PurchasesPage() {
                         Q {Number(purchase.total_cost || 0).toFixed(2)}
                       </strong>
                     </div>
-                    <div style={{ display: "flex", gap: "0.5rem", marginTop: "0.25rem" }}>
+                    <div
+                      style={{
+                        display: "flex",
+                        gap: "0.5rem",
+                        marginTop: "0.25rem",
+                      }}
+                    >
                       <Button
                         onClick={() => handleSelectDraft(purchase)}
                         variant="secondary"
-                        style={{ flex: 1, padding: "0.4rem", fontSize: "0.85rem" }}
+                        style={{
+                          flex: 1,
+                          padding: "0.4rem",
+                          fontSize: "0.85rem",
+                        }}
                       >
                         Cargar
                       </Button>
                       <Button
                         onClick={() => handleConfirmDraftDirectly(purchase.id)}
-                        style={{ flex: 1, padding: "0.4rem", fontSize: "0.85rem" }}
+                        style={{
+                          flex: 1,
+                          padding: "0.4rem",
+                          fontSize: "0.85rem",
+                        }}
                       >
                         Confirmar
                       </Button>
@@ -653,189 +976,115 @@ export function PurchasesPage() {
                 recentPurchases.map((purchase) => (
                   <article className="recent-purchase-row" key={purchase.id}>
                     <div>
-                      <strong>{purchase.invoice_number || String(purchase.id).slice(0, 8)}</strong>
+                      <strong>
+                        {purchase.invoice_number ||
+                          String(purchase.id).slice(0, 8)}
+                      </strong>
                       <span>{purchase.status}</span>
                     </div>
-                    <strong>Q {Number(purchase.total_cost || 0).toFixed(2)}</strong>
+                    <strong>
+                      Q {Number(purchase.total_cost || 0).toFixed(2)}
+                    </strong>
                   </article>
                 ))
               )}
             </div>
           </section>
         </div>
-
-        <section className="purchases-panel purchases-panel--entry">
-          <div className="purchases-panel__header">
-            <h3>Entrada de inventario</h3>
-            <span>{isLoading ? "Cargando..." : `${products.length} productos`}</span>
-          </div>
-
-          <form className="purchase-form" onSubmit={handleCreatePurchase}>
-            <div className="purchases-form-row">
-              <label>
-                <span>Proveedor</span>
-                <select onChange={(event) => setSupplierId(event.target.value)} required value={supplierId}>
-                  <option value="">Seleccionar</option>
-                  {suppliers.map((supplier) => (
-                    <option key={supplier.id} value={supplier.id}>
-                      {supplier.name}
-                    </option>
-                  ))}
-                </select>
-              </label>
-              <label>
-                <span>Factura</span>
-                <input
-                  onChange={(event) => setInvoiceNumber(event.target.value)}
-                  placeholder="Opcional"
-                  type="text"
-                  value={invoiceNumber}
-                />
-              </label>
-            </div>
-
-            <div className="purchase-item-picker">
-              <label>
-                <span>Buscar producto</span>
-                <input
-                  onChange={(event) => setProductSearch(event.target.value)}
-                  placeholder="SKU o nombre"
-                  type="search"
-                  value={productSearch}
-                />
-              </label>
-
-              <div className="purchase-item-form">
-                <label>
-                  <span>Producto</span>
-                  <select onChange={(event) => updateItemField("product", event.target.value)} value={itemForm.product}>
-                    <option value="">Seleccionar producto</option>
-                    {products.map((product) => (
-                      <option key={product.id} value={product.id}>
-                        {product.sku} - {product.name}
-                      </option>
-                    ))}
-                  </select>
-                </label>
-                <label>
-                  <span>Cantidad</span>
-                  <input
-                    min="0.001"
-                    onChange={(event) => updateItemField("qty", event.target.value)}
-                    step="0.001"
-                    type="number"
-                    value={itemForm.qty}
-                  />
-                </label>
-                <label>
-                  <span>Costo</span>
-                  <input
-                    min="0"
-                    onChange={(event) => updateItemField("unit_cost", event.target.value)}
-                    step="0.01"
-                    type="number"
-                    value={itemForm.unit_cost}
-                  />
-                </label>
-                <Button onClick={handleAddItem} type="button" variant="secondary">
-                  Agregar
-                </Button>
-              </div>
-            </div>
-
-            <div className="purchase-items">
-              {items.length === 0 ? (
-                <div className="purchase-empty">Agrega productos para crear la entrada.</div>
-              ) : (
-                items.map((item) => (
-                  <article className="purchase-item-row" key={item.product}>
-                    <div>
-                      <strong>{item.product_name}</strong>
-                      <span>{item.product_sku}</span>
-                    </div>
-                    <span>{Number(item.qty).toFixed(3)}</span>
-                    <span>Q {Number(item.unit_cost).toFixed(2)}</span>
-                    <strong>Q {(Number(item.qty) * Number(item.unit_cost)).toFixed(2)}</strong>
-                    <button onClick={() => removeItem(item.product)} type="button">
-                      Quitar
-                    </button>
-                  </article>
-                ))
-              )}
-            </div>
-
-            <div className="purchase-summary">
-              <span>Total estimado</span>
-              <strong>Q {totalCost.toFixed(2)}</strong>
-            </div>
-
-            <div className="purchase-actions">
-              <Button disabled={!branchId || isSavingPurchase || createdPurchase?.status === "DRAFT"} type="submit">
-                Crear DRAFT
-              </Button>
-              <Button
-                disabled={!createdPurchase?.id || createdPurchase?.status !== "DRAFT" || isConfirming}
-                onClick={handleConfirmPurchase}
-                type="button"
-                variant="secondary"
-              >
-                Confirmar y cargar stock
-              </Button>
-            </div>
-          </form>
-        </section>
-      </div>
+      )}
 
       {isSupplierModalOpen && (
-        <div className="modal-overlay" onClick={() => {
-          setIsSupplierModalOpen(false);
-          handleCancelEditSupplier();
-        }}>
+        <div
+          className="modal-overlay"
+          onClick={() => {
+            setIsSupplierModalOpen(false);
+            handleCancelEditSupplier();
+          }}
+        >
           <div className="modal-content" onClick={(e) => e.stopPropagation()}>
             <Card
               title="Gestionar Proveedores"
               subtitle="Crea, edita o elimina los proveedores de compras."
               actions={
-                <Button onClick={() => {
-                  setIsSupplierModalOpen(false);
-                  handleCancelEditSupplier();
-                }} variant="secondary">
+                <Button
+                  onClick={() => {
+                    setIsSupplierModalOpen(false);
+                    handleCancelEditSupplier();
+                  }}
+                  variant="secondary"
+                >
                   Cerrar
                 </Button>
               }
             >
-              {modalError && <div className="purchases-alert purchases-alert--error" style={{ marginBottom: "1rem" }}>{modalError}</div>}
-              {modalSuccess && <div className="purchases-alert purchases-alert--success" style={{ marginBottom: "1rem" }}>{modalSuccess}</div>}
+              {modalError && (
+                <div
+                  className="purchases-alert purchases-alert--error"
+                  style={{ marginBottom: "1rem" }}
+                >
+                  {modalError}
+                </div>
+              )}
+              {modalSuccess && (
+                <div
+                  className="purchases-alert purchases-alert--success"
+                  style={{ marginBottom: "1rem" }}
+                >
+                  {modalSuccess}
+                </div>
+              )}
 
               <div className="modal-grid">
                 {/* Left side: Supplier List */}
                 <div className="supplier-list-container">
-                  <h4 style={{ marginBottom: "1rem", marginTop: 0 }}>Listado ({allSuppliers.length})</h4>
+                  <h4 style={{ marginBottom: "1rem", marginTop: 0 }}>
+                    Listado ({allSuppliers.length})
+                  </h4>
                   {allSuppliers.length === 0 ? (
-                    <p style={{ color: "#64748b" }}>No hay proveedores registrados.</p>
+                    <p style={{ color: "#64748b" }}>
+                      No hay proveedores registrados.
+                    </p>
                   ) : (
                     allSuppliers.map((sup) => (
-                      <div className="supplier-item" key={sup.id} style={{
-                        backgroundColor: editingSupplierId === sup.id ? "#f1f5f9" : "transparent",
-                        borderColor: editingSupplierId === sup.id ? "#3b82f6" : "#edf2f7"
-                      }}>
+                      <div
+                        className="supplier-item"
+                        key={sup.id}
+                        style={{
+                          backgroundColor:
+                            editingSupplierId === sup.id
+                              ? "#f1f5f9"
+                              : "transparent",
+                          borderColor:
+                            editingSupplierId === sup.id
+                              ? "#3b82f6"
+                              : "#edf2f7",
+                        }}
+                      >
                         <div className="supplier-item-info">
-                          <strong style={{ fontSize: "0.95rem" }}>{sup.name}</strong>
+                          <strong style={{ fontSize: "0.95rem" }}>
+                            {sup.name}
+                          </strong>
                           {sup.contact_name && (
-                            <span style={{ fontSize: "0.75rem", color: "#64748b" }}>
+                            <span
+                              style={{ fontSize: "0.75rem", color: "#64748b" }}
+                            >
                               Contacto: {sup.contact_name}
                             </span>
                           )}
                           {sup.phone && (
-                            <span style={{ fontSize: "0.75rem", color: "#64748b" }}>
+                            <span
+                              style={{ fontSize: "0.75rem", color: "#64748b" }}
+                            >
                               Tel: {sup.phone}
                             </span>
                           )}
-                          <span style={{
-                            fontSize: "0.75rem",
-                            fontWeight: "bold",
-                            color: sup.is_active ? "#166534" : "#991b1b"
-                          }}>
+                          <span
+                            style={{
+                              fontSize: "0.75rem",
+                              fontWeight: "bold",
+                              color: sup.is_active ? "#166534" : "#991b1b",
+                            }}
+                          >
                             {sup.is_active ? "Activo" : "Inactivo"}
                           </span>
                         </div>
@@ -843,7 +1092,11 @@ export function PurchasesPage() {
                           <Button
                             onClick={() => handleEditSupplierClick(sup)}
                             variant="secondary"
-                            style={{ padding: "0.2rem 0.4rem", fontSize: "0.75rem", minHeight: "auto" }}
+                            style={{
+                              padding: "0.2rem 0.4rem",
+                              fontSize: "0.75rem",
+                              minHeight: "auto",
+                            }}
                           >
                             Editar
                           </Button>
@@ -855,7 +1108,7 @@ export function PurchasesPage() {
                               fontSize: "0.75rem",
                               minHeight: "auto",
                               color: "#ef4444",
-                              borderColor: "#fecaca"
+                              borderColor: "#fecaca",
                             }}
                           >
                             Eliminar
@@ -867,13 +1120,22 @@ export function PurchasesPage() {
                 </div>
 
                 {/* Right side: Form (Edit / Create) */}
-                <form className="supplier-form" onSubmit={handleSaveModalSupplier} style={{ padding: 0 }}>
+                <form
+                  className="supplier-form"
+                  onSubmit={handleSaveModalSupplier}
+                  style={{ padding: 0 }}
+                >
                   <h4 style={{ marginBottom: "1rem", marginTop: 0 }}>
                     {editingSupplierId ? "Editar Proveedor" : "Nuevo Proveedor"}
                   </h4>
                   <Field
                     label="Proveedor / Nombre comercial"
-                    onChange={(event) => setModalSupplierForm({ ...modalSupplierForm, name: event.target.value })}
+                    onChange={(event) =>
+                      setModalSupplierForm({
+                        ...modalSupplierForm,
+                        name: event.target.value,
+                      })
+                    }
                     placeholder="Nombre"
                     type="text"
                     value={modalSupplierForm.name}
@@ -881,7 +1143,12 @@ export function PurchasesPage() {
                   />
                   <Field
                     label="Contacto"
-                    onChange={(event) => setModalSupplierForm({ ...modalSupplierForm, contact_name: event.target.value })}
+                    onChange={(event) =>
+                      setModalSupplierForm({
+                        ...modalSupplierForm,
+                        contact_name: event.target.value,
+                      })
+                    }
                     placeholder="Nombre del contacto"
                     type="text"
                     value={modalSupplierForm.contact_name}
@@ -889,34 +1156,71 @@ export function PurchasesPage() {
                   <div className="purchases-form-row">
                     <Field
                       label="Teléfono"
-                      onChange={(event) => setModalSupplierForm({ ...modalSupplierForm, phone: event.target.value })}
+                      onChange={(event) =>
+                        setModalSupplierForm({
+                          ...modalSupplierForm,
+                          phone: event.target.value,
+                        })
+                      }
                       placeholder="Número de teléfono"
                       type="text"
                       value={modalSupplierForm.phone}
                     />
                     <Field
                       label="Dirección"
-                      onChange={(event) => setModalSupplierForm({ ...modalSupplierForm, address: event.target.value })}
+                      onChange={(event) =>
+                        setModalSupplierForm({
+                          ...modalSupplierForm,
+                          address: event.target.value,
+                        })
+                      }
                       placeholder="Dirección comercial"
                       type="text"
                       value={modalSupplierForm.address}
                     />
                   </div>
-                  <label className="field" style={{ display: "flex", flexDirection: "row", alignItems: "center", gap: "0.5rem" }}>
+                  <label
+                    className="field"
+                    style={{
+                      display: "flex",
+                      flexDirection: "row",
+                      alignItems: "center",
+                      gap: "0.5rem",
+                    }}
+                  >
                     <input
                       type="checkbox"
                       checked={modalSupplierForm.is_active}
-                      onChange={(event) => setModalSupplierForm({ ...modalSupplierForm, is_active: event.target.checked })}
+                      onChange={(event) =>
+                        setModalSupplierForm({
+                          ...modalSupplierForm,
+                          is_active: event.target.checked,
+                        })
+                      }
                       style={{ width: "auto" }}
                     />
                     <span style={{ fontWeight: "700" }}>Proveedor Activo</span>
                   </label>
-                  <div style={{ display: "flex", gap: "0.5rem", marginTop: "1rem" }}>
-                    <Button disabled={isSavingModalSupplier} type="submit" style={{ flex: 1 }}>
+                  <div
+                    style={{
+                      display: "flex",
+                      gap: "0.5rem",
+                      marginTop: "1rem",
+                    }}
+                  >
+                    <Button
+                      disabled={isSavingModalSupplier}
+                      type="submit"
+                      style={{ flex: 1 }}
+                    >
                       {editingSupplierId ? "Actualizar" : "Crear"}
                     </Button>
                     {editingSupplierId && (
-                      <Button onClick={handleCancelEditSupplier} variant="secondary" style={{ flex: 1 }}>
+                      <Button
+                        onClick={handleCancelEditSupplier}
+                        variant="secondary"
+                        style={{ flex: 1 }}
+                      >
                         Cancelar
                       </Button>
                     )}

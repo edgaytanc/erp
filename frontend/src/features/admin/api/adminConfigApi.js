@@ -41,7 +41,10 @@ export async function createCompanySettings(payload) {
 }
 
 export async function updateCompanySettings(settingsId, payload) {
-  const response = await api.patch(`/config/company-settings/${settingsId}/`, payload);
+  const response = await api.patch(
+    `/config/company-settings/${settingsId}/`,
+    payload,
+  );
   return response.data;
 }
 

@@ -38,10 +38,19 @@ export function useSaleDraft({ dispatch, state }) {
       dispatch({ type: POS_ACTIONS.CLEAR_ERROR });
       return sale;
     } catch (error) {
-      dispatch({ type: POS_ACTIONS.SET_ERROR, payload: getPosErrorMessage(error) });
+      dispatch({
+        type: POS_ACTIONS.SET_ERROR,
+        payload: getPosErrorMessage(error),
+      });
       return null;
     }
-  }, [dispatch, state.branchId, state.cartItems, state.draftSaleId, state.paymentMethod]);
+  }, [
+    dispatch,
+    state.branchId,
+    state.cartItems,
+    state.draftSaleId,
+    state.paymentMethod,
+  ]);
 
   useEffect(() => {
     window.clearTimeout(syncTimerRef.current);
@@ -55,7 +64,12 @@ export function useSaleDraft({ dispatch, state }) {
     }, 350);
 
     return () => window.clearTimeout(syncTimerRef.current);
-  }, [state.cartItems, state.lastConfirmedSale, state.paymentMethod, syncDraftNow]);
+  }, [
+    state.cartItems,
+    state.lastConfirmedSale,
+    state.paymentMethod,
+    syncDraftNow,
+  ]);
 
   return {
     syncDraftNow,

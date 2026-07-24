@@ -2,7 +2,10 @@ import { POS_ACTIONS } from "./posActions";
 import { posInitialState } from "./posInitialState";
 
 function calculateVisualTotals(cartItems) {
-  const subtotal = cartItems.reduce((sum, item) => sum + Number(item.unitPrice || 0) * item.quantity, 0);
+  const subtotal = cartItems.reduce(
+    (sum, item) => sum + Number(item.unitPrice || 0) * item.quantity,
+    0,
+  );
 
   return {
     subtotal,
@@ -25,7 +28,10 @@ export function posReducer(state, action) {
     case POS_ACTIONS.SET_SELECTED_RESULT_INDEX:
       return {
         ...state,
-        selectedResultIndex: Math.max(0, Math.min(action.payload, state.searchResults.length - 1)),
+        selectedResultIndex: Math.max(
+          0,
+          Math.min(action.payload, state.searchResults.length - 1),
+        ),
       };
     case POS_ACTIONS.SET_SYNC_STATUS:
       return { ...state, syncStatus: action.payload };
@@ -66,10 +72,14 @@ export function posReducer(state, action) {
       };
     case POS_ACTIONS.ADD_ITEM: {
       const product = action.payload;
-      const existingItem = state.cartItems.find((item) => item.productId === product.productId);
+      const existingItem = state.cartItems.find(
+        (item) => item.productId === product.productId,
+      );
       const cartItems = existingItem
         ? state.cartItems.map((item) =>
-            item.productId === product.productId ? { ...item, quantity: item.quantity + product.quantity } : item,
+            item.productId === product.productId
+              ? { ...item, quantity: item.quantity + product.quantity }
+              : item,
           )
         : [...state.cartItems, product];
 
@@ -83,7 +93,10 @@ export function posReducer(state, action) {
     case POS_ACTIONS.UPDATE_ITEM_QUANTITY: {
       const cartItems = state.cartItems.map((item) =>
         item.productId === action.payload.productId
-          ? { ...item, quantity: Math.max(1, Number(action.payload.quantity || 1)) }
+          ? {
+              ...item,
+              quantity: Math.max(1, Number(action.payload.quantity || 1)),
+            }
           : item,
       );
 
@@ -94,7 +107,9 @@ export function posReducer(state, action) {
       };
     }
     case POS_ACTIONS.REMOVE_ITEM: {
-      const cartItems = state.cartItems.filter((item) => item.productId !== action.payload);
+      const cartItems = state.cartItems.filter(
+        (item) => item.productId !== action.payload,
+      );
 
       return {
         ...state,
@@ -119,12 +134,22 @@ export function posReducer(state, action) {
         ...state,
         lastConfirmedSale: action.payload,
         serverTotals: {
-          subtotal: action.payload?.subtotal ?? action.payload?.totals?.subtotal ?? state.serverTotals.subtotal,
+          subtotal:
+            action.payload?.subtotal ??
+            action.payload?.totals?.subtotal ??
+            state.serverTotals.subtotal,
           discount: state.serverTotals.discount,
-          tax: action.payload?.tax ?? action.payload?.totals?.tax ?? state.serverTotals.tax,
-          total: action.payload?.total ?? action.payload?.totals?.total ?? state.serverTotals.total,
+          tax:
+            action.payload?.tax ??
+            action.payload?.totals?.tax ??
+            state.serverTotals.tax,
+          total:
+            action.payload?.total ??
+            action.payload?.totals?.total ??
+            state.serverTotals.total,
         },
-        syncStatus: action.payload?.status === "VOID" ? "cancelled" : "confirmed",
+        syncStatus:
+          action.payload?.status === "VOID" ? "cancelled" : "confirmed",
       };
     case POS_ACTIONS.SET_TICKET:
       return { ...state, ticketData: action.payload };

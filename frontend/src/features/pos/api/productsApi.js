@@ -14,7 +14,11 @@ function unwrapResults(data) {
   return Array.isArray(data) ? data : data?.results || [];
 }
 
-export async function searchPosProducts({ branchId, q = "", pageSize = 10 } = {}) {
+export async function searchPosProducts({
+  branchId,
+  q = "",
+  pageSize = 10,
+} = {}) {
   const productsResponse = await searchProducts({
     q,
     is_active: true,

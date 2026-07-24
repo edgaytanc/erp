@@ -229,6 +229,65 @@
   gap: 0.15rem;
 }
 
+/* Tabs container and button styles */
+.purchases-tabs {
+  display: flex;
+  gap: 0.5rem;
+  background: #f1f5f9;
+  padding: 0.35rem;
+  border-radius: 0.75rem;
+  border: 1px solid #e2e8f0;
+  margin-bottom: 1.25rem;
+  width: max-content;
+  align-self: start;
+}
+
+@media (max-width: 600px) {
+  .purchases-tabs {
+    width: 100%;
+    box-sizing: border-box;
+  }
+
+  .purchases-tab {
+    flex: 1;
+    justify-content: center;
+  }
+}
+
+.purchases-tab {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.6rem 1.2rem;
+  border: none;
+  background: transparent;
+  border-radius: 0.5rem;
+  font-weight: 600;
+  font-size: 0.95rem;
+  color: #64748b;
+  cursor: pointer;
+  transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+.purchases-tab:hover {
+  color: #0f172a;
+  background: rgba(255, 255, 255, 0.5);
+}
+
+.purchases-tab.active {
+  color: #2563eb;
+  background: #ffffff;
+  box-shadow:
+    0 4px 6px -1px rgba(0, 0, 0, 0.08),
+    0 2px 4px -1px rgba(0, 0, 0, 0.04);
+}
+
+.purchases-tab .tab-icon {
+  width: 18px;
+  height: 18px;
+  stroke-width: 2.25;
+}
+
 @media (max-width: 1180px) {
   .purchases-grid {
     grid-template-columns: 1fr;
@@ -239,12 +298,23 @@
   .purchases-toolbar,
   .purchases-form-row,
   .purchase-item-form,
-  .purchase-item-row,
   .purchase-actions {
     grid-template-columns: 1fr;
   }
 
   .purchases-toolbar {
     align-items: stretch;
+  }
+
+  /* Internal horizontal scroll for the purchase items table on mobile */
+  .purchase-items {
+    overflow-x: auto;
+    -webkit-overflow-scrolling: touch;
+    border: 1px solid #edf2f7;
+  }
+
+  .purchase-item-row {
+    min-width: 650px; /* Evita que las columnas se colapsen y causen wrapping */
+    grid-template-columns: minmax(180px, 1.5fr) 80px 100px 100px 78px;
   }
 }

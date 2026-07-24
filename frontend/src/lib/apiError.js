@@ -1,4 +1,7 @@
-export function extractApiErrorMessage(error, fallbackMessage = "Ha ocurrido un error.") {
+export function extractApiErrorMessage(
+  error,
+  fallbackMessage = "Ha ocurrido un error.",
+) {
   const detail = error?.response?.data?.detail;
 
   if (typeof detail === "string" && detail.trim()) {

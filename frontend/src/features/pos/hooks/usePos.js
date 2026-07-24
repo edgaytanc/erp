@@ -3,7 +3,7 @@ import { useCallback, useEffect, useReducer, useRef } from "react";
 import { useProductSearch } from "./useProductSearch";
 import { useSaleActions } from "./useSaleActions";
 import { useSaleDraft } from "./useSaleDraft";
-import { usePosKeyboard } from "./usePosKeyboard";
+
 import { useAuth } from "../../../contexts/AuthContext";
 import { getCurrentCashRegister } from "../api/salesApi";
 import { POS_ACTIONS } from "../state/posActions";
@@ -14,9 +14,16 @@ export function usePos() {
   const { user } = useAuth();
   const [state, dispatch] = useReducer(posReducer, posInitialState);
   const searchInputRef = useRef(null);
-  const productSearch = useProductSearch({ branchId: state.branchId, searchTerm: state.searchTerm });
+  const productSearch = useProductSearch({
+    branchId: state.branchId,
+    searchTerm: state.searchTerm,
+  });
   const saleDraft = useSaleDraft({ dispatch, state });
-  const saleActions = useSaleActions({ state, dispatch, syncDraftNow: saleDraft.syncDraftNow });
+  const saleActions = useSaleActions({
+    state,
+    dispatch,
+    syncDraftNow: saleDraft.syncDraftNow,
+  });
 
   useEffect(() => {
     dispatch({
@@ -124,12 +131,19 @@ export function usePos() {
         return;
       }
 
-      const existingItem = state.cartItems.find((item) => item.productId === product.id);
+      const existingItem = state.cartItems.find(
+        (item) => item.productId === product.id,
+      );
 
-      if (product.stock !== null && existingItem && existingItem.quantity >= product.stock) {
+      if (
+        product.stock !== null &&
+        existingItem &&
+        existingItem.quantity >= product.stock
+      ) {
         dispatch({
           type: POS_ACTIONS.SET_ERROR,
-          payload: "Stock insuficiente para agregar otra unidad de este producto.",
+          payload:
+            "Stock insuficiente para agregar otra unidad de este producto.",
         });
         return;
       }
@@ -148,12 +162,19 @@ export function usePos() {
       dispatch({ type: POS_ACTIONS.SET_SEARCH_TERM, payload: "" });
       focusSearch();
     },
-    [focusSearch, state.cartItems, state.cashRegisterSession, state.lastConfirmedSale],
+    [
+      focusSearch,
+      state.cartItems,
+      state.cashRegisterSession,
+      state.lastConfirmedSale,
+    ],
   );
 
   const updateQuantity = useCallback(
     (productId, quantity) => {
-      const item = state.cartItems.find((cartItem) => cartItem.productId === productId);
+      const item = state.cartItems.find(
+        (cartItem) => cartItem.productId === productId,
+      );
 
       if (item && item.stock !== null && Number(quantity) > item.stock) {
         dispatch({
@@ -178,12 +199,6 @@ export function usePos() {
   const setPaymentMethod = useCallback((paymentMethod) => {
     dispatch({ type: POS_ACTIONS.SET_PAYMENT_METHOD, payload: paymentMethod });
   }, []);
-
-  usePosKeyboard({
-    onConfirm: saleActions.confirmSale,
-    onClear: saleActions.clearSale,
-    onSearchFocus: focusSearch,
-  });
 
   return {
     state,

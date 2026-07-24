@@ -61,7 +61,9 @@ export async function getInventoryReport(params = {}) {
 }
 
 export async function getCriticalStockReport(params = {}) {
-  const response = await api.get("/reports/inventory/critical-stock/", { params });
+  const response = await api.get("/reports/inventory/critical-stock/", {
+    params,
+  });
   return response.data;
 }
 
