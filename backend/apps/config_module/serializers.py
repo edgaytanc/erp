@@ -61,6 +61,7 @@ class CompanySettingsSerializer(serializers.ModelSerializer):
             "money_rounding",
             "sale_void_window_minutes",
             "max_cash_sessions_per_day",
+            "logo_url",
             "is_active",
             "created_at",
             "updated_at",

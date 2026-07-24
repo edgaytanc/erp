@@ -157,6 +157,20 @@ export function ConfigGeneral({
             />
           </label>
         </div>
+        <div className="admin-form-row">
+          <label>
+            <span>URL del logo (Configuración)</span>
+            <input
+              className="field__input"
+              onChange={(event) =>
+                updateSettingsField("logo_url", event.target.value)
+              }
+              placeholder="https://..."
+              type="text"
+              value={settingsForm.logo_url}
+            />
+          </label>
+        </div>
         <Button disabled={isSaving} type="submit">
           Guardar empresa
         </Button>
