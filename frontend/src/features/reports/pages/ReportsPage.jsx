@@ -1,6 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
 
-import { Button } from "../../../components/common/Button";
 import { extractApiErrorMessage } from "../../../lib/apiError";
 import { listBranches, listUsers } from "../../admin/api/adminConfigApi";
 import {
@@ -18,13 +17,24 @@ import {
   getSalesByProductReport,
   getTopSellingProductsReport,
 } from "../api/reportsApi";
+import { ReportFilters } from "../components/ReportFilters";
+import { ReportSummary } from "../components/ReportSummary";
+import { ReportTable } from "../components/ReportTable";
+import {
+  escapeHtml,
+  monthStartIsoDate,
+  selectedBranchLabel,
+  todayIsoDate,
+  unwrapResults,
+  valueFor,
+} from "../utils/reportUtils";
 import "../../../styles/reports.css";
 
 const REPORT_GROUPS = [
   {
     id: "sales",
     label: "Ventas",
-    description: "Analisis de ventas por producto y categoria.",
+    description: "Análisis de ventas por producto y categoría.",
     reports: [
       {
         id: "sales-product",
@@ -39,7 +49,7 @@ const REPORT_GROUPS = [
         columns: [
           ["SKU", "sku"],
           ["Producto", "name"],
-          ["Categoria", "category_name"],
+          ["Categoría", "category_name"],
           ["Ventas", "sales_count", "number"],
           ["Unidades", "units_sold", "number"],
           ["Total", "total", "money"],
@@ -47,16 +57,16 @@ const REPORT_GROUPS = [
       },
       {
         id: "sales-category",
-        label: "Ventas por Categoria",
+        label: "Ventas por Categoría",
         fetcher: getSalesByCategoryReport,
         usesDates: true,
         summary: [
-          ["Categorias", "categories_count"],
+          ["Categorías", "categories_count"],
           ["Unidades", "units_sold", "number"],
           ["Total vendido", "total", "money"],
         ],
         columns: [
-          ["Categoria", "category_name"],
+          ["Categoría", "category_name"],
           ["Productos", "products_count", "number"],
           ["Ventas", "sales_count", "number"],
           ["Unidades", "units_sold", "number"],
@@ -96,7 +106,7 @@ const REPORT_GROUPS = [
         columns: [
           ["SKU", "sku"],
           ["Producto", "name"],
-          ["Categoria", "category_name"],
+          ["Categoría", "category_name"],
           ["Ventas", "sales_count", "number"],
           ["Unidades", "units_sold", "number"],
           ["Total", "total_revenue", "money"],
@@ -147,7 +157,8 @@ const REPORT_GROUPS = [
   {
     id: "purchases",
     label: "Compras",
-    description: "Analisis de proveedores, productos comprados y relacion compras contra ventas.",
+    description:
+      "Análisis de proveedores, productos comprados y relación compras contra ventas.",
     reports: [
       {
         id: "purchases-supplier",
@@ -167,7 +178,7 @@ const REPORT_GROUPS = [
       },
       {
         id: "purchased-products",
-        label: "Productos mas comprados",
+        label: "Productos más comprados",
         fetcher: getPurchasedProductsReport,
         usesDates: true,
         summary: [
@@ -178,7 +189,7 @@ const REPORT_GROUPS = [
         columns: [
           ["SKU", "sku"],
           ["Producto", "name"],
-          ["Categoria", "category_name"],
+          ["Categoría", "category_name"],
           ["Compras", "purchases_count", "number"],
           ["Unidades", "units_purchased", "number"],
           ["Total", "total_cost", "money"],
@@ -206,21 +217,22 @@ const REPORT_GROUPS = [
   {
     id: "inventory",
     label: "Inventario",
-    description: "Stock critico, valor, distribucion por sucursal y movimientos.",
+    description:
+      "Stock crítico, valor, distribución por sucursal y movimientos.",
     reports: [
       {
         id: "critical-stock",
-        label: "Stock Critico",
+        label: "Stock Crítico",
         fetcher: getCriticalStockReport,
         usesDates: false,
-        summary: [["Productos criticos", "critical_count", "number"]],
+        summary: [["Productos críticos", "critical_count", "number"]],
         columns: [
           ["Sucursal", "branch_name"],
           ["SKU", "sku"],
           ["Producto", "name"],
-          ["Categoria", "category_name"],
+          ["Categoría", "category_name"],
           ["Stock", "qty_on_hand", "number"],
-          ["Minimo", "min_stock", "number"],
+          ["Mínimo", "min_stock", "number"],
           ["Faltante", "shortage", "number"],
         ],
       },
@@ -238,7 +250,7 @@ const REPORT_GROUPS = [
           ["Sucursal", "branch_name"],
           ["SKU", "sku"],
           ["Producto", "name"],
-          ["Categoria", "category_name"],
+          ["Categoría", "category_name"],
           ["Stock", "qty_on_hand", "number"],
           ["Costo", "unit_cost", "money"],
           ["Valor", "inventory_value", "money"],
@@ -252,14 +264,14 @@ const REPORT_GROUPS = [
         summary: [
           ["SKUs", "sku_count", "number"],
           ["Unidades", "total_qty", "number"],
-          ["Stock critico", "critical_count", "number"],
+          ["Stock crítico", "critical_count", "number"],
           ["Valor", "inventory_value", "money"],
         ],
         columns: [
           ["Sucursal", "branch_name"],
           ["SKUs", "sku_count", "number"],
           ["Unidades", "total_qty", "number"],
-          ["Stock critico", "critical_count", "number"],
+          ["Stock crítico", "critical_count", "number"],
           ["Valor", "inventory_value", "money"],
         ],
       },
@@ -289,60 +301,6 @@ const REPORT_GROUPS = [
   },
 ];
 
-function formatMoney(value) {
-  return new Intl.NumberFormat("es-GT", {
-    style: "currency",
-    currency: "GTQ",
-    minimumFractionDigits: 2,
-  }).format(Number(value || 0));
-}
-
-function formatNumber(value) {
-  return new Intl.NumberFormat("es-GT", {
-    maximumFractionDigits: 2,
-  }).format(Number(value || 0));
-}
-
-function todayIsoDate() {
-  return new Date().toISOString().slice(0, 10);
-}
-
-function monthStartIsoDate() {
-  const date = new Date();
-  return new Date(date.getFullYear(), date.getMonth(), 1).toISOString().slice(0, 10);
-}
-
-function escapeHtml(value) {
-  return String(value ?? "")
-    .replaceAll("&", "&amp;")
-    .replaceAll("<", "&lt;")
-    .replaceAll(">", "&gt;")
-    .replaceAll('"', "&quot;")
-    .replaceAll("'", "&#039;");
-}
-
-function unwrapResults(data) {
-  return Array.isArray(data) ? data : data?.results || [];
-}
-
-function valueFor(row, key, type) {
-  const value = row?.[key];
-
-  if (type === "money") return formatMoney(value);
-  if (type === "number") return formatNumber(value);
-  if (type === "percentage") return `${formatNumber(value)}%`;
-  if (type === "date") return value ? new Date(value).toLocaleString("es-GT") : "Sin fecha";
-  if (key === "type") return value === "IN" ? "Entrada" : value === "OUT" ? "Salida" : value || "-";
-  if (key === "status") return value === "OPEN" ? "Abierta" : value === "CLOSED" ? "Cerrada" : value || "-";
-  return value ?? "-";
-}
-
-function selectedBranchLabel(branchId, branches, data) {
-  if (data?.scope?.branch_name) return data.scope.branch_name;
-  if (!branchId) return "Todas las sucursales";
-  return branches.find((branch) => branch.id === branchId)?.name || "Sucursal seleccionada";
-}
-
 function buildPdfHtml({ report, data, dateFrom, dateTo, branchLabel }) {
   const rows = data?.items || [];
   const filters = report.usesDates
@@ -353,20 +311,24 @@ function buildPdfHtml({ report, data, dateFrom, dateTo, branchLabel }) {
         .map(
           (row) =>
             `<tr>${report.columns
-              .map(([, key, type]) => `<td>${escapeHtml(valueFor(row, key, type))}</td>`)
-              .join("")}</tr>`
+              .map(
+                ([, key, type]) =>
+                  `<td>${escapeHtml(valueFor(row, key, type))}</td>`,
+              )
+              .join("")}</tr>`,
         )
         .join("")
     : `<tr><td colspan="${report.columns.length}">Sin datos para los filtros seleccionados.</td></tr>`;
 
-  const footerHtml = (report.id === "margin" && rows.length > 0)
-    ? `<tr style="font-weight: bold; background: #f1f5f9;">
+  const footerHtml =
+    report.id === "margin" && rows.length > 0
+      ? `<tr style="font-weight: bold; background: #f1f5f9;">
         <td>Promedio General</td>
         <td>-</td>
         <td>-</td>
         <td>${escapeHtml(valueFor(data?.summary, "average_margin", "percentage"))}</td>
        </tr>`
-    : "";
+      : "";
 
   return `
     <!doctype html>
@@ -485,7 +447,9 @@ function buildPdfHtml({ report, data, dateFrom, dateTo, branchLabel }) {
 
 export function ReportsPage() {
   const [activeGroupId, setActiveGroupId] = useState("sales");
-  const [activeReportId, setActiveReportId] = useState(REPORT_GROUPS[0].reports[0].id);
+  const [activeReportId, setActiveReportId] = useState(
+    REPORT_GROUPS[0].reports[0].id,
+  );
   const [dateFrom, setDateFrom] = useState(monthStartIsoDate);
   const [dateTo, setDateTo] = useState(todayIsoDate);
   const [branchId, setBranchId] = useState("");
@@ -498,13 +462,16 @@ export function ReportsPage() {
   const [error, setError] = useState(null);
 
   const activeGroup = useMemo(
-    () => REPORT_GROUPS.find((group) => group.id === activeGroupId) || REPORT_GROUPS[0],
-    [activeGroupId]
+    () =>
+      REPORT_GROUPS.find((group) => group.id === activeGroupId) ||
+      REPORT_GROUPS[0],
+    [activeGroupId],
   );
   const activeReport = useMemo(
     () =>
-      activeGroup.reports.find((report) => report.id === activeReportId) || activeGroup.reports[0],
-    [activeGroup, activeReportId]
+      activeGroup.reports.find((report) => report.id === activeReportId) ||
+      activeGroup.reports[0],
+    [activeGroup, activeReportId],
   );
   const branchLabel = selectedBranchLabel(branchId, branches, reportData);
 
@@ -526,7 +493,9 @@ export function ReportsPage() {
       }
 
       const [branchesResponse, reportResponse] = await Promise.all([
-        branches.length ? Promise.resolve(branches) : listBranches({ is_active: true }),
+        branches.length
+          ? Promise.resolve(branches)
+          : listBranches({ is_active: true }),
         activeReport.fetcher(params),
       ]);
 
@@ -536,7 +505,9 @@ export function ReportsPage() {
       }
       setReportData(reportResponse);
     } catch (requestError) {
-      setError(extractApiErrorMessage(requestError, "No se pudo cargar el reporte."));
+      setError(
+        extractApiErrorMessage(requestError, "No se pudo cargar el reporte."),
+      );
     } finally {
       setIsLoading(false);
     }
@@ -564,7 +535,7 @@ export function ReportsPage() {
     const printable = window.open("about:blank", "_blank");
     if (!printable) {
       setError(
-        "No se pudo abrir la pestaña del reporte. Revisa si el navegador bloqueo ventanas emergentes."
+        "No se pudo abrir la pestaña del reporte. Revisa si el navegador bloqueó ventanas emergentes.",
       );
       return;
     }
@@ -576,7 +547,7 @@ export function ReportsPage() {
         dateFrom,
         dateTo,
         branchLabel,
-      })
+      }),
     );
     printable.document.close();
     printable.focus();
@@ -589,11 +560,17 @@ export function ReportsPage() {
           <h2>Reportes</h2>
           <p>{activeGroup.description}</p>
         </div>
-        <div className="reports-tabs" role="tablist" aria-label="Tipos de reporte">
+        <div
+          className="reports-tabs"
+          role="tablist"
+          aria-label="Tipos de reporte"
+        >
           {REPORT_GROUPS.map((group) => (
             <button
               className={
-                activeGroupId === group.id ? "reports-tab reports-tab--active" : "reports-tab"
+                activeGroupId === group.id
+                  ? "reports-tab reports-tab--active"
+                  : "reports-tab"
               }
               key={group.id}
               onClick={() => handleGroupChange(group)}
@@ -605,160 +582,74 @@ export function ReportsPage() {
         </div>
       </section>
 
-      <section className="reports-selector" aria-label="Reportes disponibles">
-        {activeGroup.reports.map((report) => (
-          <button
-            className={
-              activeReport.id === report.id
-                ? "reports-option reports-option--active"
-                : "reports-option"
-            }
-            key={report.id}
-            onClick={() => {
-              setActiveReportId(report.id);
-              setReportData(null);
-            }}
-            type="button"
+      <div className="reports-grid">
+        {/* Left Column: Sidebar with Selector and Filters */}
+        <div className="reports-grid__sidebar">
+          <section
+            className="reports-selector"
+            aria-label="Reportes disponibles"
           >
-            {report.label}
-          </button>
-        ))}
-      </section>
-
-      <form className="reports-filters" onSubmit={handleApplyFilters}>
-        <label>
-          <span>Desde</span>
-          <input
-            disabled={!activeReport.usesDates}
-            onChange={(event) => setDateFrom(event.target.value)}
-            type="date"
-            value={dateFrom}
-          />
-        </label>
-        <label>
-          <span>Hasta</span>
-          <input
-            disabled={!activeReport.usesDates}
-            onChange={(event) => setDateTo(event.target.value)}
-            type="date"
-            value={dateTo}
-          />
-        </label>
-        <label>
-          <span>Sucursal</span>
-          <select onChange={(event) => setBranchId(event.target.value)} value={branchId}>
-            <option value="">Todas las sucursales</option>
-            {branches.map((branch) => (
-              <option key={branch.id} value={branch.id}>
-                {branch.name}
-              </option>
+            {activeGroup.reports.map((report) => (
+              <button
+                className={
+                  activeReport.id === report.id
+                    ? "reports-option reports-option--active"
+                    : "reports-option"
+                }
+                key={report.id}
+                onClick={() => {
+                  setActiveReportId(report.id);
+                  setReportData(null);
+                }}
+                type="button"
+              >
+                {report.label}
+              </button>
             ))}
-          </select>
-        </label>
-        {activeReport.usesCashiers ? (
-          <label>
-            <span>Cajero</span>
-            <select onChange={(event) => setCashierId(event.target.value)} value={cashierId}>
-              <option value="">Todos los cajeros</option>
-              {users
-                .filter((user) => user.role === "sales" || user.role === "admin")
-                .map((user) => (
-                  <option key={user.id} value={user.id}>
-                    {user.first_name || user.last_name
-                      ? `${user.first_name} ${user.last_name}`.trim()
-                      : user.username}
-                  </option>
-                ))}
-            </select>
-          </label>
-        ) : null}
-        {activeReport.usesLimit ? (
-          <label>
-            <span>Top N</span>
-            <input
-              onChange={(event) => setLimit(Number(event.target.value))}
-              type="number"
-              min="1"
-              max="500"
-              value={limit}
-            />
-          </label>
-        ) : null}
-        <Button disabled={isLoading} type="submit">
-          Aplicar
-        </Button>
-        <Button
-          disabled={isLoading || !reportData}
-          onClick={handleGeneratePdf}
-          type="button"
-          variant="secondary"
-        >
-          Generar version PDF
-        </Button>
-      </form>
+          </section>
 
-      {error ? <div className="reports-alert">{error}</div> : null}
-
-      <section className="reports-current">
-        <div>
-          <span>Reporte activo</span>
-          <h3>{activeReport.label}</h3>
+          <ReportFilters
+            activeReport={activeReport}
+            dateFrom={dateFrom}
+            setDateFrom={setDateFrom}
+            dateTo={dateTo}
+            setDateTo={setDateTo}
+            branchId={branchId}
+            setBranchId={setBranchId}
+            branches={branches}
+            cashierId={cashierId}
+            setCashierId={setCashierId}
+            users={users}
+            limit={limit}
+            setLimit={setLimit}
+            isLoading={isLoading}
+            reportData={reportData}
+            onSubmit={handleApplyFilters}
+            onGeneratePdf={handleGeneratePdf}
+          />
         </div>
-        <p>{branchLabel}</p>
-      </section>
 
-      <section className="reports-summary">
-        {activeReport.summary.map(([label, key, type]) => (
-          <article key={key}>
-            <span>{label}</span>
-            <strong>{valueFor(reportData?.summary, key, type)}</strong>
-          </article>
-        ))}
-      </section>
+        {/* Right Column: Content with Current Report, Summary, and Details Table */}
+        <div className="reports-grid__content">
+          {error ? <div className="reports-alert">{error}</div> : null}
 
-      <section className="reports-panel reports-panel--detail">
-        <div className="reports-panel__header">
-          <h3>Detalle</h3>
-          <span>{isLoading ? "Cargando..." : `${reportData?.items?.length || 0} filas`}</span>
+          <section className="reports-current">
+            <div>
+              <span>Reporte activo</span>
+              <h3>{activeReport.label}</h3>
+            </div>
+            <p>{branchLabel}</p>
+          </section>
+
+          <ReportSummary activeReport={activeReport} reportData={reportData} />
+
+          <ReportTable
+            activeReport={activeReport}
+            reportData={reportData}
+            isLoading={isLoading}
+          />
         </div>
-        <div className="reports-table-wrap">
-          <table className="reports-data-table">
-            <thead>
-              <tr>
-                {activeReport.columns.map(([label]) => (
-                  <th key={label}>{label}</th>
-                ))}
-              </tr>
-            </thead>
-            <tbody>
-              {(reportData?.items || []).map((row, index) => (
-                <tr
-                  key={row.id || row.product || row.category || row.supplier || row.branch || index}
-                >
-                  {activeReport.columns.map(([label, key, type]) => (
-                    <td key={`${label}-${key}`}>{valueFor(row, key, type)}</td>
-                  ))}
-                </tr>
-              ))}
-              {!isLoading && activeReport.id === "margin" && (reportData?.items || []).length > 0 ? (
-                <tr style={{ fontWeight: "bold", background: "#f1f5f9" }}>
-                  <td>Promedio General</td>
-                  <td>-</td>
-                  <td>-</td>
-                  <td>{valueFor(reportData?.summary, "average_margin", "percentage")}</td>
-                </tr>
-              ) : null}
-              {!isLoading && (reportData?.items || []).length === 0 ? (
-                <tr>
-                  <td colSpan={activeReport.columns.length}>
-                    <div className="reports-empty">Sin datos para estos filtros.</div>
-                  </td>
-                </tr>
-              ) : null}
-            </tbody>
-          </table>
-        </div>
-      </section>
+      </div>
     </div>
   );
 }

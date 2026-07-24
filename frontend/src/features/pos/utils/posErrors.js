@@ -1,6 +1,7 @@
 export function getPosErrorMessage(error) {
   const status = error?.response?.status;
-  const detail = error?.response?.data?.detail || error?.response?.data?.message;
+  const detail =
+    error?.response?.data?.detail || error?.response?.data?.message;
 
   if (detail) {
     return detail;

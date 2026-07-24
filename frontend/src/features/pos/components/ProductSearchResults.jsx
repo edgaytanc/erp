@@ -1,6 +1,12 @@
 import { formatMoney } from "../utils/money";
 
-export function ProductSearchResults({ isLoading, results, selectedIndex, onSelect, onHighlight }) {
+export function ProductSearchResults({
+  isLoading,
+  results,
+  selectedIndex,
+  onSelect,
+  onHighlight,
+}) {
   if (isLoading) {
     return <div className="pos-search-empty">Buscando productos...</div>;
   }
@@ -10,7 +16,11 @@ export function ProductSearchResults({ isLoading, results, selectedIndex, onSele
   }
 
   return (
-    <div className="products-section" role="listbox" aria-label="Resultados de productos">
+    <div
+      className="products-section"
+      role="listbox"
+      aria-label="Resultados de productos"
+    >
       {results.map((product, index) => {
         const isOutOfStock = product.stock !== null && product.stock <= 0;
         return (

@@ -1,4 +1,10 @@
-export function SaleActions({ canCancel, canConfirm, onCancel, onClear, onConfirm }) {
+export function SaleActions({
+  canCancel,
+  canConfirm,
+  onCancel,
+  onClear,
+  onConfirm,
+}) {
   return (
     <div className="action-buttons">
       <button
@@ -9,11 +15,7 @@ export function SaleActions({ canCancel, canConfirm, onCancel, onClear, onConfir
       >
         Confirmar venta
       </button>
-      <button
-        className="btn btn-secondary"
-        onClick={onClear}
-        type="button"
-      >
+      <button className="btn btn-secondary" onClick={onClear} type="button">
         Nueva venta
       </button>
       <button

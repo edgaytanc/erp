@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { Link } from "react-router-dom";
 
 import { CancelSaleModal } from "./CancelSaleModal";
@@ -11,13 +11,69 @@ import { SaleActions } from "./SaleActions";
 import { SaleErrorBanner } from "./SaleErrorBanner";
 import { SaleStatusBar } from "./SaleStatusBar";
 import { TicketPreview } from "./TicketPreview";
+import { usePosKeyboard } from "../hooks/usePosKeyboard";
 
-export function PosShell({ actions, isProductSearchLoading, searchInputRef, state }) {
+export function PosShell({
+  actions,
+  isProductSearchLoading,
+  searchInputRef,
+  state,
+}) {
   const [isCancelModalOpen, setIsCancelModalOpen] = useState(false);
   const [isCashPaymentModalOpen, setIsCashPaymentModalOpen] = useState(false);
+  const [activeTab, setActiveTab] = useState("search");
+
   const hasOpenCashRegister = Boolean(state.cashRegisterSession);
-  const canConfirm = state.cartItems.length > 0 && state.syncStatus !== "syncing" && hasOpenCashRegister;
+  const canConfirm =
+    state.cartItems.length > 0 &&
+    state.syncStatus !== "syncing" &&
+    hasOpenCashRegister;
   const canCancel = state.lastConfirmedSale?.status === "CONFIRMED";
+
+  // Focus search input on mount
+  useEffect(() => {
+    actions.focusSearch();
+  }, [actions]);
+
+  // Hook for global keyboard shortcuts
+  usePosKeyboard({
+    enabled: true,
+    onSearchFocus: () => {
+      actions.focusSearch();
+    },
+    onNavigateResults: (direction) => {
+      const len = state.searchResults.length;
+      if (len === 0) return;
+      let nextIndex = state.selectedResultIndex;
+      if (direction === "up") {
+        nextIndex = nextIndex <= 0 ? len - 1 : nextIndex - 1;
+      } else {
+        nextIndex = nextIndex >= len - 1 ? 0 : nextIndex + 1;
+      }
+      actions.setSelectedResultIndex(nextIndex);
+    },
+    onAddSelectedProduct: () => {
+      const selectedProduct = state.searchResults[state.selectedResultIndex];
+      if (selectedProduct) {
+        actions.addProduct(selectedProduct);
+      }
+    },
+    onConfirm: () => {
+      if (isCashPaymentModalOpen) return;
+      if (canConfirm) {
+        handleConfirmClick();
+      }
+    },
+    onCancel: () => {
+      if (isCashPaymentModalOpen) {
+        setIsCashPaymentModalOpen(false);
+      } else if (isCancelModalOpen) {
+        setIsCancelModalOpen(false);
+      } else {
+        actions.clearSale();
+      }
+    },
+  });
 
   function handleCancelConfirm(reason) {
     actions.cancelSale(reason);
@@ -47,7 +103,9 @@ export function PosShell({ actions, isProductSearchLoading, searchInputRef, stat
           <p>Interfaz rápida para vendedores y administradores</p>
         </div>
         <Link to="/app">
-          <button className="btn-back" type="button">Volver al panel</button>
+          <button className="btn-back" type="button">
+            Volver al panel
+          </button>
         </Link>
       </div>
 
@@ -74,17 +132,41 @@ export function PosShell({ actions, isProductSearchLoading, searchInputRef, stat
       {/* Sale Error Banner */}
       <SaleErrorBanner message={state.lastError} />
 
+      {/* Mobile tabs navigation */}
+      <div className="pos-tabs">
+        <button
+          className={`pos-tab-button ${activeTab === "search" ? "active" : ""}`}
+          onClick={() => setActiveTab("search")}
+          type="button"
+        >
+          🔍 Buscar productos
+        </button>
+        <button
+          className={`pos-tab-button ${activeTab === "cart" ? "active" : ""}`}
+          onClick={() => setActiveTab("cart")}
+          type="button"
+        >
+          🛒 Carrito ({state.cartItems.length})
+        </button>
+      </div>
+
       {/* Main Content */}
       <div className="main-content">
         {/* Left Column */}
-        <div className="left-column">
+        <div
+          className={`left-column ${activeTab === "search" ? "show-search" : "show-cart"}`}
+        >
           <CartPanel
             items={state.cartItems}
             onRemove={actions.removeItem}
             onUpdateQuantity={actions.updateQuantity}
           />
           <ProductSearch
-            disabled={!state.branchId || Boolean(state.lastConfirmedSale) || !hasOpenCashRegister}
+            disabled={
+              !state.branchId ||
+              Boolean(state.lastConfirmedSale) ||
+              !hasOpenCashRegister
+            }
             inputRef={searchInputRef}
             isLoading={isProductSearchLoading}
             onAddProduct={actions.addProduct}
@@ -97,13 +179,18 @@ export function PosShell({ actions, isProductSearchLoading, searchInputRef, stat
         </div>
 
         {/* Right Column */}
-        <div className="right-column">
+        <div
+          className={`right-column ${activeTab === "cart" ? "show-right" : "hide-right"}`}
+        >
           <CartTotals totals={state.serverTotals} />
-          
-          <PaymentPanel onChange={actions.setPaymentMethod} paymentMethod={state.paymentMethod} />
-          
+
+          <PaymentPanel
+            onChange={actions.setPaymentMethod}
+            paymentMethod={state.paymentMethod}
+          />
+
           <TicketPreview ticket={state.ticketData} />
-          
+
           <SaleActions
             canCancel={canCancel}
             canConfirm={canConfirm}

@@ -87,7 +87,9 @@ export function LoginPage() {
       const targetPath = user.role === "sales" ? "/pos" : "/app";
       navigate(targetPath, { replace: true });
     } catch (requestError) {
-      setError(extractApiErrorMessage(requestError, "No fue posible iniciar sesión."));
+      setError(
+        extractApiErrorMessage(requestError, "No fue posible iniciar sesión."),
+      );
     } finally {
       setIsSubmitting(false);
     }
@@ -105,7 +107,10 @@ export function LoginPage() {
               onError={() => setHasLogoError(true)}
             />
           ) : (
-            <div className="auth-card__logo auth-card__logo--fallback" aria-hidden="true">
+            <div
+              className="auth-card__logo auth-card__logo--fallback"
+              aria-hidden="true"
+            >
               {branding.name.charAt(0).toUpperCase()}
             </div>
           )}

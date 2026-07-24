@@ -22,7 +22,9 @@ export function CartItemRow({ item, onRemove, onUpdateQuantity }) {
           className="qty-value"
           min="1"
           max={item.stock}
-          onChange={(event) => onUpdateQuantity(item.productId, Number(event.target.value))}
+          onChange={(event) =>
+            onUpdateQuantity(item.productId, Number(event.target.value))
+          }
           type="number"
           value={item.quantity}
         />

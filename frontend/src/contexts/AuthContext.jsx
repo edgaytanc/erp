@@ -1,4 +1,11 @@
-import { createContext, useCallback, useContext, useEffect, useMemo, useState } from "react";
+import {
+  createContext,
+  useCallback,
+  useContext,
+  useEffect,
+  useMemo,
+  useState,
+} from "react";
 
 import api from "../lib/axios";
 import {
@@ -36,7 +43,10 @@ export function AuthProvider({ children }) {
   }, []);
 
   const login = useCallback(async ({ username, password }) => {
-    const loginResponse = await api.post("/auth/login/", { username, password });
+    const loginResponse = await api.post("/auth/login/", {
+      username,
+      password,
+    });
     const nextAccessToken = loginResponse.data.access;
     const nextRefreshToken = loginResponse.data.refresh;
 
@@ -73,7 +83,9 @@ export function AuthProvider({ children }) {
     }
 
     try {
-      const response = await api.post("/auth/refresh/", { refresh: currentRefreshToken });
+      const response = await api.post("/auth/refresh/", {
+        refresh: currentRefreshToken,
+      });
       const nextAccessToken = response.data.access;
 
       setAccessToken(nextAccessToken);
@@ -127,7 +139,16 @@ export function AuthProvider({ children }) {
       refreshAccessToken,
       fetchMe,
     }),
-    [accessToken, refreshToken, user, isBootstrapping, login, logout, refreshAccessToken, fetchMe],
+    [
+      accessToken,
+      refreshToken,
+      user,
+      isBootstrapping,
+      login,
+      logout,
+      refreshAccessToken,
+      fetchMe,
+    ],
   );
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;

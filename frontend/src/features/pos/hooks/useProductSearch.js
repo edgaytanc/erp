@@ -29,7 +29,9 @@ export function useProductSearch({ branchId, searchTerm }) {
         });
 
         if (!controller.signal.aborted) {
-          const inStockProducts = products.filter((product) => product.stock > 0);
+          const inStockProducts = products.filter(
+            (product) => product.stock > 0,
+          );
           setResults(inStockProducts);
         }
       } catch (requestError) {

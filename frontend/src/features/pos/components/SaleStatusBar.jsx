@@ -14,7 +14,8 @@ export function SaleStatusBar({ cartCount, draftSaleId, status, branchName }) {
         <strong>{statusLabels[status] || statusLabels.idle}</strong>
       </div>
       <div className="status-item">
-        <strong>{cartCount}</strong> {cartCount === 1 ? "producto" : "productos"} en carrito
+        <strong>{cartCount}</strong>{" "}
+        {cartCount === 1 ? "producto" : "productos"} en carrito
       </div>
       {draftSaleId ? (
         <div className="status-item">
@@ -33,10 +34,16 @@ export function SaleStatusBar({ cartCount, draftSaleId, status, branchName }) {
           <span className="shortcut">F2</span> buscar
         </span>
         <span>
-          <span className="shortcut">F9</span> confirmar
+          <span className="shortcut">↑↓</span> navegar
         </span>
         <span>
-          <span className="shortcut">Esc</span> limpiar
+          <span className="shortcut">Enter</span> agregar
+        </span>
+        <span>
+          <span className="shortcut">F4/F9</span> cobrar
+        </span>
+        <span>
+          <span className="shortcut">Esc</span> cancelar
         </span>
       </div>
     </div>

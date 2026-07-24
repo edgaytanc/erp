@@ -11,7 +11,10 @@ export async function createCategory(payload) {
 }
 
 export async function updateCategory(categoryId, payload) {
-  const response = await api.put(`/inventory/categories/${categoryId}/`, payload);
+  const response = await api.put(
+    `/inventory/categories/${categoryId}/`,
+    payload,
+  );
   return response.data;
 }
 
@@ -31,7 +34,10 @@ export async function createProduct(payload) {
 }
 
 export async function updateProduct(productId, payload) {
-  const response = await api.patch(`/inventory/products/${productId}/`, payload);
+  const response = await api.patch(
+    `/inventory/products/${productId}/`,
+    payload,
+  );
   return response.data;
 }
 
