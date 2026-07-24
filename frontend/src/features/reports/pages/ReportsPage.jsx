@@ -15,6 +15,7 @@ import {
   getPurchasesVsSalesReport,
   getSalesByCategoryReport,
   getSalesByProductReport,
+  getSupplierDetailsReport,
   getTopSellingProductsReport,
 } from "../api/reportsApi";
 import { ReportFilters } from "../components/ReportFilters";
@@ -193,6 +194,24 @@ const REPORT_GROUPS = [
           ["Compras", "purchases_count", "number"],
           ["Unidades", "units_purchased", "number"],
           ["Total", "total_cost", "money"],
+        ],
+      },
+      {
+        id: "supplier-details",
+        label: "Detalles Proveedores",
+        fetcher: getSupplierDetailsReport,
+        usesDates: true,
+        summary: [
+          ["Total comprado", "total_cost", "money"],
+          ["Cantidad total", "total_qty", "number"],
+          ["Productos únicos", "products_count", "number"],
+        ],
+        columns: [
+          ["Fecha", "purchased_at"],
+          ["Nombre Proveedor", "supplier_name"],
+          ["Producto", "product_name"],
+          ["Cantidad", "qty", "number"],
+          ["Total Comprado", "total_cost", "money"],
         ],
       },
       {
