@@ -54,10 +54,12 @@ export function PosShell({
     hasOpenCashRegister;
   const canCancel = state.lastConfirmedSale?.status === "CONFIRMED";
 
+  const { focusSearch } = actions;
+
   // Focus search input on mount
   useEffect(() => {
-    actions.focusSearch();
-  }, [actions]);
+    focusSearch();
+  }, [focusSearch]);
 
   // Hook for global keyboard shortcuts
   usePosKeyboard({
