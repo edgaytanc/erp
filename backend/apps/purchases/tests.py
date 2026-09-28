@@ -7,7 +7,7 @@ from rest_framework.test import APITestCase
 
 from apps.core.models import Branch, Company
 from apps.inventory.models import Category, Product, ReferenceType, Stock, StockMovement
-from apps.purchases.models import Purchase, PurchaseStatus, Supplier
+from apps.purchases.models import Purchase, PurchaseItem, PurchaseStatus, Supplier
 
 
 class PurchasesApiIntegrationTestCase(APITestCase):
@@ -83,6 +83,21 @@ class PurchasesApiIntegrationTestCase(APITestCase):
                 },
             ],
         }
+
+    def test_supplier_search_by_name_icontains(self):
+        self.authenticate_purchases()
+        Supplier.objects.create(
+            name="Distribuidora Los Alpes",
+            contact_name="Carlos",
+            phone="12345678",
+            is_active=True,
+        )
+        url = reverse("suppliers-list")
+        response = self.client.get(url, {"name": "alpes"})
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        results = response.data if isinstance(response.data, list) else response.data.get("results", [])
+        self.assertEqual(len(results), 1)
+        self.assertEqual(results[0]["name"], "Distribuidora Los Alpes")
 
     def test_supplier_crud_is_available_for_purchases_role(self):
         self.authenticate_purchases()
@@ -259,3 +274,28 @@ class PurchasesApiIntegrationTestCase(APITestCase):
         response = self.client.post(reverse("purchases-list"), self.purchase_payload(), format="json")
         self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
         self.assertIn("proveedor", str(response.data).lower())
+
+    def test_purchase_status_confirmed_via_model_save_triggers_inventory_sync(self):
+        purchase = Purchase.objects.create(
+            branch=self.branch,
+            supplier=self.supplier,
+            status=PurchaseStatus.DRAFT,
+        )
+        PurchaseItem.objects.create(
+            purchase=purchase,
+            product=self.product,
+            qty=Decimal("5.000"),
+            unit_cost=Decimal("10.00"),
+            subtotal=Decimal("50.00"),
+        )
+        purchase.status = PurchaseStatus.CONFIRMED
+        purchase.save()
+
+        stock = Stock.objects.get(branch=self.branch, product=self.product)
+        self.assertEqual(stock.qty_on_hand, Decimal("5.00"))
+        self.assertTrue(
+            StockMovement.objects.filter(
+                reference_type=ReferenceType.PURCHASE,
+                reference_id=str(purchase.id),
+            ).exists()
+        )

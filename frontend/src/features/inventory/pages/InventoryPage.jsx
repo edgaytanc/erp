@@ -18,6 +18,7 @@ import {
   updateCategory,
   updateProduct,
 } from "../api/inventoryApi";
+import { PricingAlertSection } from "../components/PricingAlertSection";
 import "../../../styles/inventory.css";
 
 const emptyProductForm = {
@@ -74,6 +75,7 @@ export function InventoryPage() {
     [categories],
   );
   const isEditingProduct = Boolean(editingProductId);
+  const isMaster = user?.role === "admin";
 
   async function loadInventory(nextSearchTerm = searchTerm) {
     setIsLoading(true);
@@ -381,6 +383,18 @@ export function InventoryPage() {
           <p>Productos reales para compras, stock y ventas POS.</p>
         </div>
       </section>
+
+      {/* Alertas de precios para el usuario Master */}
+      {isMaster && (
+        <PricingAlertSection
+          onProductUpdated={() => {
+            loadInventory(searchTerm);
+            if (activeTab === "stock") {
+              loadStockData();
+            }
+          }}
+        />
+      )}
 
       {/* Tabs Navigation */}
       <div className="inventory-tabs">

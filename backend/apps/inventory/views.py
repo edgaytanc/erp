@@ -81,7 +81,9 @@ class ProductViewSet(viewsets.ModelViewSet):
         is_active = self.request.query_params.get("is_active")
         sku = self.request.query_params.get("sku")
         barcode = self.request.query_params.get("barcode")
+        name = self.request.query_params.get("name")
         q = self.request.query_params.get("q")
+        search = self.request.query_params.get("search")
 
         if category_id:
             qs = qs.filter(category_id=category_id)
@@ -97,12 +99,25 @@ class ProductViewSet(viewsets.ModelViewSet):
         if barcode:
             qs = qs.filter(barcode__icontains=barcode)
 
-        if q:
+        if name:
+            qs = qs.filter(name__icontains=name)
+
+        search_term = q or search
+        if search_term:
             qs = qs.filter(
-                Q(name__icontains=q)
-                | Q(sku__icontains=q)
-                | Q(barcode__icontains=q)
-                | Q(description__icontains=q)
+                Q(name__icontains=search_term)
+                | Q(sku__icontains=search_term)
+                | Q(barcode__icontains=search_term)
+                | Q(description__icontains=search_term)
+            )
+
+        needs_pricing = self.request.query_params.get("needs_pricing")
+        if needs_pricing in ("1", "true", "True"):
+            qs = qs.filter(
+                Q(sale_price__lte=Decimal("0.00"))
+                | Q(cost_price__lte=Decimal("0.00"))
+                | Q(sale_price__isnull=True)
+                | Q(cost_price__isnull=True)
             )
 
         return qs.order_by(*self.ordering)
@@ -112,6 +127,30 @@ class ProductViewSet(viewsets.ModelViewSet):
         product.is_active = False
         product.save(update_fields=["is_active", "updated_at"])
         return Response(status=204)
+
+    @action(detail=False, methods=["get"], url_path="needs-pricing")
+    def needs_pricing(self, request):
+        """
+        GET /api/inventory/products/needs-pricing/
+        Retorna los productos activos que requieren actualización de precios (precio_venta <= 0 o precio_costo <= 0).
+        """
+        qs = (
+            self.get_queryset()
+            .filter(
+                Q(sale_price__lte=Decimal("0.00"))
+                | Q(cost_price__lte=Decimal("0.00"))
+                | Q(sale_price__isnull=True)
+                | Q(cost_price__isnull=True)
+            )
+            .filter(is_active=True)
+            .order_by("-created_at")
+        )
+        page = self.paginate_queryset(qs)
+        if page is not None:
+            serializer = self.get_serializer(page, many=True)
+            return self.get_paginated_response(serializer.data)
+        serializer = self.get_serializer(qs, many=True)
+        return Response(serializer.data)
 
     @action(
         detail=False,

@@ -41,6 +41,7 @@ class CategorySerializer(serializers.ModelSerializer):
 
 class ProductSerializer(serializers.ModelSerializer):
     category_name = serializers.CharField(source="category.name", read_only=True)
+    needs_pricing = serializers.BooleanField(read_only=True)
 
     class Meta:
         model = Product
@@ -55,14 +56,20 @@ class ProductSerializer(serializers.ModelSerializer):
             "sale_price",
             "cost_price",
             "min_stock",
+            "needs_pricing",
             "is_active",
             "created_at",
             "updated_at",
         ]
-        read_only_fields = ["id", "created_at", "updated_at", "category_name"]
+        read_only_fields = ["id", "created_at", "updated_at", "category_name", "needs_pricing"]
+        extra_kwargs = {
+            "sku": {"required": False, "allow_blank": True},
+        }
 
-    def validate_sku(self, value: str) -> str:
-        return value.strip().upper()
+    def validate_sku(self, value: str | None) -> str:
+        if value:
+            return value.strip().upper()
+        return ""
 
     def validate_barcode(self, value: str | None) -> str | None:
         if value in (None, ""):

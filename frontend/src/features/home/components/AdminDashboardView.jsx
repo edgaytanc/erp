@@ -14,6 +14,7 @@ import {
   buildSalesTrend,
   buildTopProducts,
 } from "./DashboardCommon";
+import { PricingAlertSection } from "../../inventory/components/PricingAlertSection";
 
 export default function AdminDashboardView({
   data,
@@ -99,6 +100,7 @@ export default function AdminDashboardView({
       <div className="dashboard-tab-content">
         {activeTab === "summary" && (
           <div className="dashboard-tab-pane animate-fade-in">
+            <PricingAlertSection />
             {user?.branch ? (
               <section
                 className="dashboard-pos-hero"
@@ -212,6 +214,7 @@ export default function AdminDashboardView({
 
         {activeTab === "activity" && (
           <div className="dashboard-tab-pane animate-fade-in">
+            <PricingAlertSection />
             <div className="dashboard-columns">
               <Panel
                 title="Alertas de inventario"

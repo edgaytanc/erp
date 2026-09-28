@@ -53,7 +53,7 @@ class Product(TimeStampedModel):
         null=True,
         blank=True,
     )
-    sku = models.CharField(max_length=60, unique=True)
+    sku = models.CharField(max_length=60, unique=True, blank=True)
     barcode = models.CharField(max_length=100, blank=True, null=True, unique=True)
     name = models.CharField(max_length=180)
     description = models.TextField(blank=True, default="")
@@ -79,10 +79,42 @@ class Product(TimeStampedModel):
         if self.min_stock < 0:
             raise ValidationError({"min_stock": "El stock mínimo no puede ser negativo."})
 
+    @property
+    def needs_pricing(self) -> bool:
+        """
+        Indica si el producto requiere actualización de precios.
+        Retorna True si el precio de venta o de costo es menor o igual a 0.
+        """
+        sale = self.sale_price if self.sale_price is not None else Decimal("0.00")
+        cost = self.cost_price if self.cost_price is not None else Decimal("0.00")
+        return sale <= Decimal("0.00") or cost <= Decimal("0.00")
+
+    def _generate_sequential_sku(self) -> str:
+        existing_skus = Product.objects.filter(sku__startswith="PROD-").values_list("sku", flat=True)
+        max_num = 0
+        for item in existing_skus:
+            parts = item.split("-", 1)
+            if len(parts) == 2 and parts[1].isdigit():
+                num = int(parts[1])
+                if num > max_num:
+                    max_num = num
+
+        next_num = max_num + 1
+        candidate = f"PROD-{next_num:04d}"
+        while Product.objects.filter(sku=candidate).exists():
+            next_num += 1
+            candidate = f"PROD-{next_num:04d}"
+        return candidate
+
     def save(self, *args, **kwargs):
-        self.sku = (self.sku or "").strip().upper()
         if self.barcode == "":
             self.barcode = None
+
+        if self.sku:
+            self.sku = self.sku.strip().upper()
+        else:
+            self.sku = self._generate_sequential_sku()
+
         super().save(*args, **kwargs)
 
     def __str__(self) -> str:
