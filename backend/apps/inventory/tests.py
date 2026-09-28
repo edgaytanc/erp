@@ -8,7 +8,16 @@ from rest_framework import status
 from rest_framework.test import APITestCase
 
 from apps.core.models import Branch, Company
-from apps.inventory.models import Category, Product, ReferenceType, Stock, StockMovement
+from apps.inventory.models import (
+    Category,
+    Product,
+    ProductBenefit,
+    ReferenceType,
+    SkinType,
+    Stock,
+    StockMovement,
+    TargetProblem,
+)
 from apps.inventory.services import (
     apply_inventory_movement,
     register_adjustment,
@@ -335,6 +344,67 @@ class InventoryAPITestCase(APITestCase):
         self.assertEqual(prod.sale_price, Decimal("25.00"))
         self.assertEqual(prod.cost_price, Decimal("15.00"))
         self.assertFalse(prod.needs_pricing)
+
+    def test_pos_recommendation_requires_branch(self):
+        self.client.force_authenticate(user=self.admin_user)
+        url = reverse("pos-recommendations")
+        response = self.client.get(url, {"q": "crema"})
+        self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
+
+    def test_pos_recommendation_empty_query(self):
+        self.client.force_authenticate(user=self.admin_user)
+        url = reverse("pos-recommendations")
+        response = self.client.get(url, {"q": "", "branch_id": str(self.branch.id)})
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.assertEqual(response.data, [])
+
+    def test_pos_recommendation_full_text_and_stock(self):
+        self.client.force_authenticate(user=self.admin_user)
+        p1 = Product.objects.create(
+            category=self.category,
+            sku="SERUM-001",
+            name="Serum Facial Hidratante de Ácido Hialurónico",
+            sale_price=Decimal("150.00"),
+            skin_type=SkinType.SECA,
+            target_problems=[TargetProblem.ARRUGAS],
+            benefits=[ProductBenefit.HIDRAT, ProductBenefit.ANTIAGE],
+            keywords="hidratacion profunda arrugas",
+            description="Serum para piel seca y líneas de expresión",
+        )
+        p2 = Product.objects.create(
+            category=self.category,
+            sku="GEL-001",
+            name="Gel Limpiador Purificante Seborregulador",
+            sale_price=Decimal("120.00"),
+            skin_type=SkinType.GRASA,
+            target_problems=[TargetProblem.ACNE],
+            benefits=[ProductBenefit.SEBOCONT],
+            keywords="grasa espinillas acne",
+            description="Gel limpiador para piel grasa con tendencia a acné",
+        )
+        p_no_stock = Product.objects.create(
+            category=self.category,
+            sku="CREMA-001",
+            name="Crema Anti-Acné Matificante",
+            sale_price=Decimal("110.00"),
+            skin_type=SkinType.GRASA,
+            target_problems=[TargetProblem.ACNE],
+            benefits=[ProductBenefit.SEBOCONT],
+            keywords="acne matificante",
+        )
+        Stock.objects.create(branch=self.branch, product=p1, qty_on_hand=Decimal("10.00"))
+        Stock.objects.create(branch=self.branch, product=p2, qty_on_hand=Decimal("5.00"))
+        Stock.objects.create(branch=self.branch, product=p_no_stock, qty_on_hand=Decimal("0.00"))
+
+        url = reverse("pos-recommendations")
+        response = self.client.get(url, {"q": "piel seca arrugas hidratacion", "branch_id": str(self.branch.id)})
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        results = response.data
+        self.assertTrue(len(results) >= 1)
+        self.assertEqual(results[0]["id"], str(p1.id))
+        self.assertEqual(results[0]["name"], p1.name)
+        self.assertEqual(results[0]["main_benefit"], "Hidratación")
+        self.assertNotIn(str(p_no_stock.id), [r["id"] for r in results])
 
 
 class InventoryServiceIntegrationTestCase(TestCase):

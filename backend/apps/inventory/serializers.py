@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from rest_framework import serializers
 
-from .models import Category, Product, Stock, StockMovement
+from .models import Category, Product, ProductBenefit, SkinType, Stock, StockMovement, TargetProblem
 
 
 class CategorySerializer(serializers.ModelSerializer):
@@ -42,6 +42,9 @@ class CategorySerializer(serializers.ModelSerializer):
 class ProductSerializer(serializers.ModelSerializer):
     category_name = serializers.CharField(source="category.name", read_only=True)
     needs_pricing = serializers.BooleanField(read_only=True)
+    skin_type_display = serializers.CharField(source="get_skin_type_display", read_only=True)
+    target_problems_display = serializers.SerializerMethodField()
+    benefits_display = serializers.SerializerMethodField()
 
     class Meta:
         model = Product
@@ -57,14 +60,43 @@ class ProductSerializer(serializers.ModelSerializer):
             "cost_price",
             "min_stock",
             "needs_pricing",
+            "skin_type",
+            "skin_type_display",
+            "target_problems",
+            "target_problems_display",
+            "benefits",
+            "benefits_display",
+            "keywords",
             "is_active",
             "created_at",
             "updated_at",
         ]
-        read_only_fields = ["id", "created_at", "updated_at", "category_name", "needs_pricing"]
+        read_only_fields = [
+            "id",
+            "created_at",
+            "updated_at",
+            "category_name",
+            "needs_pricing",
+            "skin_type_display",
+            "target_problems_display",
+            "benefits_display",
+        ]
         extra_kwargs = {
             "sku": {"required": False, "allow_blank": True},
+            "skin_type": {"required": False, "allow_blank": True},
+            "target_problems": {"required": False},
+            "benefits": {"required": False},
+            "keywords": {"required": False, "allow_blank": True},
+            "description": {"required": False, "allow_blank": True},
         }
+
+    def get_target_problems_display(self, obj: Product) -> list[str]:
+        mapping = dict(TargetProblem.choices)
+        return [mapping.get(p, p) for p in (obj.target_problems or [])]
+
+    def get_benefits_display(self, obj: Product) -> list[str]:
+        mapping = dict(ProductBenefit.choices)
+        return [mapping.get(b, b) for b in (obj.benefits or [])]
 
     def validate_sku(self, value: str | None) -> str:
         if value:
@@ -81,6 +113,52 @@ class ProductSerializer(serializers.ModelSerializer):
         if not value:
             raise serializers.ValidationError("El nombre del producto es requerido.")
         return value
+
+
+class ProductRecommendationSerializer(serializers.ModelSerializer):
+    price = serializers.DecimalField(source="sale_price", max_digits=12, decimal_places=2, read_only=True)
+    stock = serializers.DecimalField(source="stock_qty", max_digits=14, decimal_places=2, read_only=True)
+    main_benefit = serializers.SerializerMethodField()
+    benefits_display = serializers.SerializerMethodField()
+    target_problems_display = serializers.SerializerMethodField()
+    skin_type_display = serializers.CharField(source="get_skin_type_display", read_only=True)
+    rank = serializers.FloatField(read_only=True, default=0.0)
+
+    class Meta:
+        model = Product
+        fields = [
+            "id",
+            "sku",
+            "barcode",
+            "name",
+            "description",
+            "price",
+            "sale_price",
+            "stock",
+            "skin_type",
+            "skin_type_display",
+            "target_problems",
+            "target_problems_display",
+            "benefits",
+            "benefits_display",
+            "main_benefit",
+            "keywords",
+            "rank",
+        ]
+
+    def get_main_benefit(self, obj: Product) -> str:
+        if obj.benefits:
+            mapping = dict(ProductBenefit.choices)
+            return mapping.get(obj.benefits[0], obj.benefits[0])
+        return ""
+
+    def get_benefits_display(self, obj: Product) -> list[str]:
+        mapping = dict(ProductBenefit.choices)
+        return [mapping.get(b, b) for b in (obj.benefits or [])]
+
+    def get_target_problems_display(self, obj: Product) -> list[str]:
+        mapping = dict(TargetProblem.choices)
+        return [mapping.get(p, p) for p in (obj.target_problems or [])]
 
 
 class StockSerializer(serializers.ModelSerializer):

@@ -5,7 +5,16 @@ import { Card } from "../../../components/common/Card";
 import { Field } from "../../../components/common/Field";
 import { useAuth } from "../../../contexts/AuthContext";
 import { extractApiErrorMessage } from "../../../lib/apiError";
-import { listProducts } from "../../inventory/api/inventoryApi";
+import {
+  createProduct,
+  listCategories,
+  listProducts,
+} from "../../inventory/api/inventoryApi";
+import {
+  SKIN_TYPES,
+  TARGET_PROBLEMS,
+  PRODUCT_BENEFITS,
+} from "../../inventory/constants/productAttributes";
 import {
   confirmPurchase,
   createPurchase,
@@ -32,6 +41,22 @@ const emptyItemForm = {
   product: "",
   qty: "1.000",
   unit_cost: "0.00",
+};
+
+const emptyQuickProductForm = {
+  name: "",
+  sku: "",
+  barcode: "",
+  category: "",
+  cost_price: "0.00",
+  sale_price: "0.00",
+  min_stock: "0.00",
+  skin_type: "",
+  target_problems: [],
+  benefits: [],
+  keywords: "",
+  description: "",
+  is_active: true,
 };
 
 const modalStyles = `
@@ -179,6 +204,10 @@ export function PurchasesPage() {
   const [productQuery, setProductQuery] = useState("");
   const [isProductDropdownOpen, setIsProductDropdownOpen] = useState(false);
   const [selectedProduct, setSelectedProduct] = useState(null);
+  const [isQuickProductModalOpen, setIsQuickProductModalOpen] = useState(false);
+  const [quickProductForm, setQuickProductForm] = useState(emptyQuickProductForm);
+  const [isSavingProduct, setIsSavingProduct] = useState(false);
+  const [categories, setCategories] = useState([]);
 
   const filteredSuppliers = useMemo(() => {
     const trimmed = supplierQuery.trim().toLowerCase();
@@ -218,6 +247,16 @@ export function PurchasesPage() {
       .slice(0, 15);
   }, [products, productQuery]);
 
+  const hasExactProductMatch = useMemo(() => {
+    const trimmed = productQuery.trim().toLowerCase();
+    if (!trimmed) return true;
+    return products.some(
+      (p) =>
+        p.name.trim().toLowerCase() === trimmed ||
+        p.sku.trim().toLowerCase() === trimmed,
+    );
+  }, [products, productQuery]);
+
   const totalCost = useMemo(
     () =>
       items.reduce(
@@ -238,6 +277,7 @@ export function PurchasesPage() {
         productsResponse,
         purchasesResponse,
         draftsResponse,
+        categoriesResponse,
       ] = await Promise.all([
         listSuppliers(),
         listProducts({
@@ -248,12 +288,14 @@ export function PurchasesPage() {
         }),
         listPurchases({ page_size: 10, branch: branchId }),
         listDraftPurchases({ branch: branchId }),
+        listCategories({ page_size: 100 }),
       ]);
 
       const suppliersList = unwrapResults(suppliersResponse);
       setAllSuppliers(suppliersList);
       setSuppliers(suppliersList.filter((supplier) => supplier.is_active));
       setProducts(unwrapResults(productsResponse));
+      setCategories(unwrapResults(categoriesResponse));
       setRecentPurchases(unwrapResults(purchasesResponse));
       setDraftPurchases(unwrapResults(draftsResponse));
     } catch (requestError) {
@@ -354,6 +396,64 @@ export function PurchasesPage() {
       );
     } finally {
       setIsSavingSupplier(false);
+    }
+  }
+
+  function handleOpenQuickProductModal() {
+    setQuickProductForm({
+      ...emptyQuickProductForm,
+      name: productQuery.trim(),
+    });
+    setIsQuickProductModalOpen(true);
+    setIsProductDropdownOpen(false);
+  }
+
+  async function handleSaveQuickProduct(e) {
+    e.preventDefault();
+    if (!quickProductForm.name.trim()) {
+      setError("Escribe el nombre del producto.");
+      return;
+    }
+
+    setIsSavingProduct(true);
+    setError(null);
+
+    try {
+      const payload = {
+        ...quickProductForm,
+        name: quickProductForm.name.trim(),
+        sku: quickProductForm.sku.trim(),
+        barcode: quickProductForm.barcode.trim() || null,
+        category: quickProductForm.category || null,
+        skin_type: quickProductForm.skin_type || "",
+        target_problems: quickProductForm.target_problems || [],
+        benefits: quickProductForm.benefits || [],
+        keywords: quickProductForm.keywords.trim(),
+        description: quickProductForm.description.trim(),
+        cost_price: Number(quickProductForm.cost_price || 0).toFixed(2),
+        sale_price: Number(quickProductForm.sale_price || 0).toFixed(2),
+        min_stock: Number(quickProductForm.min_stock || 0).toFixed(2),
+      };
+
+      const created = await createProduct(payload);
+      setProducts((current) =>
+        [...current, created].sort((a, b) => a.name.localeCompare(b.name)),
+      );
+      setSelectedProduct(created);
+      setProductQuery(created.name);
+      setItemForm((current) => ({
+        ...current,
+        product: created.id,
+        unit_cost: created.cost_price
+          ? Number(created.cost_price).toFixed(2)
+          : current.unit_cost,
+      }));
+      setIsQuickProductModalOpen(false);
+      setSuccess(`Producto "${created.name}" registrado correctamente.`);
+    } catch (err) {
+      setError(extractApiErrorMessage(err, "No se pudo crear el producto."));
+    } finally {
+      setIsSavingProduct(false);
     }
   }
 
@@ -1032,6 +1132,27 @@ export function PurchasesPage() {
                         ))}
                       </ul>
                     )}
+                    {productQuery.trim() !== "" && !hasExactProductMatch && (
+                      <div style={{ marginTop: "0.5rem" }}>
+                        <button
+                          type="button"
+                          className="btn btn--primary"
+                          style={{
+                            display: "inline-flex",
+                            alignItems: "center",
+                            gap: "0.35rem",
+                            padding: "0.45rem 0.85rem",
+                            fontSize: "0.85rem",
+                            fontWeight: 600,
+                            width: "100%",
+                            justifyContent: "center",
+                          }}
+                          onClick={handleOpenQuickProductModal}
+                        >
+                          Crear producto &ldquo;{productQuery.trim()}&rdquo;
+                        </button>
+                      </div>
+                    )}
                   </div>
 
                   <label>
@@ -1602,6 +1723,274 @@ export function PurchasesPage() {
                   disabled={isSavingSupplier}
                 >
                   {isSavingSupplier ? "Guardando..." : "Guardar proveedor"}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {isQuickProductModalOpen && (
+        <div
+          className="pos-modal-backdrop"
+          role="presentation"
+          onClick={() => setIsQuickProductModalOpen(false)}
+        >
+          <div
+            className="pos-modal pos-modal--wide"
+            role="dialog"
+            aria-modal="true"
+            onClick={(e) => e.stopPropagation()}
+            style={{ maxHeight: "90vh", overflowY: "auto" }}
+          >
+            <h2>Crear producto</h2>
+            <p>Registra el nuevo producto para agregarlo a la orden de compra.</p>
+            <form onSubmit={handleSaveQuickProduct}>
+              <div style={{ display: "grid", gap: "0.75rem", marginBottom: "1rem" }}>
+                <label style={{ display: "grid", gap: "0.25rem" }}>
+                  <span style={{ fontSize: "0.85rem", fontWeight: 600 }}>
+                    Nombre del producto *
+                  </span>
+                  <input
+                    type="text"
+                    className="field__input"
+                    required
+                    autoFocus
+                    value={quickProductForm.name}
+                    onChange={(e) =>
+                      setQuickProductForm((prev) => ({
+                        ...prev,
+                        name: e.target.value,
+                      }))
+                    }
+                    placeholder="Nombre completo del producto"
+                  />
+                </label>
+
+                <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "0.75rem" }}>
+                  <label style={{ display: "grid", gap: "0.25rem" }}>
+                    <span style={{ fontSize: "0.85rem", fontWeight: 600 }}>
+                      SKU (opcional)
+                    </span>
+                    <input
+                      type="text"
+                      className="field__input"
+                      value={quickProductForm.sku}
+                      onChange={(e) =>
+                        setQuickProductForm((prev) => ({
+                          ...prev,
+                          sku: e.target.value,
+                        }))
+                      }
+                      placeholder="Autogenerado si está vacío"
+                    />
+                  </label>
+                  <label style={{ display: "grid", gap: "0.25rem" }}>
+                    <span style={{ fontSize: "0.85rem", fontWeight: 600 }}>
+                      Categoría
+                    </span>
+                    <select
+                      className="field__input"
+                      value={quickProductForm.category}
+                      onChange={(e) =>
+                        setQuickProductForm((prev) => ({
+                          ...prev,
+                          category: e.target.value,
+                        }))
+                      }
+                    >
+                      <option value="">Sin categoría</option>
+                      {categories.map((c) => (
+                        <option key={c.id} value={c.id}>
+                          {c.name}
+                        </option>
+                      ))}
+                    </select>
+                  </label>
+                </div>
+
+                <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "0.75rem" }}>
+                  <label style={{ display: "grid", gap: "0.25rem" }}>
+                    <span style={{ fontSize: "0.85rem", fontWeight: 600 }}>
+                      Precio Costo (Q) *
+                    </span>
+                    <input
+                      type="number"
+                      step="0.01"
+                      min="0"
+                      className="field__input"
+                      value={quickProductForm.cost_price}
+                      onChange={(e) =>
+                        setQuickProductForm((prev) => ({
+                          ...prev,
+                          cost_price: e.target.value,
+                        }))
+                      }
+                    />
+                  </label>
+                  <label style={{ display: "grid", gap: "0.25rem" }}>
+                    <span style={{ fontSize: "0.85rem", fontWeight: 600 }}>
+                      Precio Venta (Q) *
+                    </span>
+                    <input
+                      type="number"
+                      step="0.01"
+                      min="0"
+                      className="field__input"
+                      value={quickProductForm.sale_price}
+                      onChange={(e) =>
+                        setQuickProductForm((prev) => ({
+                          ...prev,
+                          sale_price: e.target.value,
+                        }))
+                      }
+                    />
+                  </label>
+                </div>
+
+                {/* Standardized selects for skin_type, benefits, target_problems */}
+                <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "0.75rem" }}>
+                  <label style={{ display: "grid", gap: "0.25rem" }}>
+                    <span style={{ fontSize: "0.85rem", fontWeight: 600 }}>
+                      Tipo de Piel / Cabello (SkinType)
+                    </span>
+                    <select
+                      className="field__input"
+                      value={quickProductForm.skin_type}
+                      onChange={(e) =>
+                        setQuickProductForm((prev) => ({
+                          ...prev,
+                          skin_type: e.target.value,
+                        }))
+                      }
+                    >
+                      <option value="">-- Seleccionar tipo --</option>
+                      {SKIN_TYPES.map((type) => (
+                        <option key={type.value} value={type.value}>
+                          {type.label}
+                        </option>
+                      ))}
+                    </select>
+                  </label>
+
+                  <label style={{ display: "grid", gap: "0.25rem" }}>
+                    <span style={{ fontSize: "0.85rem", fontWeight: 600 }}>
+                      Beneficios (ProductBenefit)
+                    </span>
+                    <select
+                      multiple
+                      size={3}
+                      className="field__input"
+                      style={{ minHeight: "75px" }}
+                      value={quickProductForm.benefits}
+                      onChange={(e) => {
+                        const selected = Array.from(
+                          e.target.selectedOptions,
+                          (opt) => opt.value,
+                        );
+                        setQuickProductForm((prev) => ({
+                          ...prev,
+                          benefits: selected,
+                        }));
+                      }}
+                    >
+                      {PRODUCT_BENEFITS.map((benefit) => (
+                        <option key={benefit.value} value={benefit.value}>
+                          {benefit.label}
+                        </option>
+                      ))}
+                    </select>
+                    <small style={{ color: "#64748b", fontSize: "11px" }}>
+                      Ctrl/Cmd + clic para múltiples
+                    </small>
+                  </label>
+                </div>
+
+                <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "0.75rem" }}>
+                  <label style={{ display: "grid", gap: "0.25rem" }}>
+                    <span style={{ fontSize: "0.85rem", fontWeight: 600 }}>
+                      Problemas Objetivo (TargetProblem)
+                    </span>
+                    <select
+                      multiple
+                      size={3}
+                      className="field__input"
+                      style={{ minHeight: "75px" }}
+                      value={quickProductForm.target_problems}
+                      onChange={(e) => {
+                        const selected = Array.from(
+                          e.target.selectedOptions,
+                          (opt) => opt.value,
+                        );
+                        setQuickProductForm((prev) => ({
+                          ...prev,
+                          target_problems: selected,
+                        }));
+                      }}
+                    >
+                      {TARGET_PROBLEMS.map((problem) => (
+                        <option key={problem.value} value={problem.value}>
+                          {problem.label}
+                        </option>
+                      ))}
+                    </select>
+                    <small style={{ color: "#64748b", fontSize: "11px" }}>
+                      Ctrl/Cmd + clic para múltiples
+                    </small>
+                  </label>
+
+                  <label style={{ display: "grid", gap: "0.25rem" }}>
+                    <span style={{ fontSize: "0.85rem", fontWeight: 600 }}>
+                      Palabras clave (Keywords)
+                    </span>
+                    <input
+                      type="text"
+                      className="field__input"
+                      placeholder="Ej: hidratante, antiarrugas, serum"
+                      value={quickProductForm.keywords}
+                      onChange={(e) =>
+                        setQuickProductForm((prev) => ({
+                          ...prev,
+                          keywords: e.target.value,
+                        }))
+                      }
+                    />
+                  </label>
+                </div>
+
+                <label style={{ display: "grid", gap: "0.25rem" }}>
+                  <span style={{ fontSize: "0.85rem", fontWeight: 600 }}>
+                    Descripción
+                  </span>
+                  <textarea
+                    rows={2}
+                    className="field__input"
+                    value={quickProductForm.description}
+                    onChange={(e) =>
+                      setQuickProductForm((prev) => ({
+                        ...prev,
+                        description: e.target.value,
+                      }))
+                    }
+                    placeholder="Descripción detallada del producto..."
+                  />
+                </label>
+              </div>
+
+              <div className="pos-modal__actions">
+                <Button
+                  type="button"
+                  variant="secondary"
+                  onClick={() => setIsQuickProductModalOpen(false)}
+                >
+                  Cancelar
+                </Button>
+                <button
+                  type="submit"
+                  className="btn btn--primary"
+                  disabled={isSavingProduct}
+                >
+                  {isSavingProduct ? "Guardando..." : "Guardar y Seleccionar"}
                 </button>
               </div>
             </form>
