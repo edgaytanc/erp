@@ -18,6 +18,13 @@ import {
   updateCategory,
   updateProduct,
 } from "../api/inventoryApi";
+import { PricingAlertSection } from "../components/PricingAlertSection";
+import {
+  SKIN_TYPES,
+  TARGET_PROBLEMS,
+  PRODUCT_BENEFITS,
+  SKIN_TYPE_MAP,
+} from "../constants/productAttributes";
 import "../../../styles/inventory.css";
 
 const emptyProductForm = {
@@ -29,6 +36,10 @@ const emptyProductForm = {
   sale_price: "",
   cost_price: "",
   min_stock: "0.00",
+  skin_type: "",
+  target_problems: [],
+  benefits: [],
+  keywords: "",
   is_active: true,
 };
 
@@ -74,6 +85,7 @@ export function InventoryPage() {
     [categories],
   );
   const isEditingProduct = Boolean(editingProductId);
+  const isMaster = user?.role === "admin";
 
   async function loadInventory(nextSearchTerm = searchTerm) {
     setIsLoading(true);
@@ -175,6 +187,12 @@ export function InventoryPage() {
       sale_price: Number(product.sale_price || 0).toFixed(2),
       cost_price: Number(product.cost_price || 0).toFixed(2),
       min_stock: Number(product.min_stock || 0).toFixed(2),
+      skin_type: product.skin_type || "",
+      target_problems: Array.isArray(product.target_problems)
+        ? product.target_problems
+        : [],
+      benefits: Array.isArray(product.benefits) ? product.benefits : [],
+      keywords: product.keywords || "",
       is_active: Boolean(product.is_active),
     };
   }
@@ -232,6 +250,10 @@ export function InventoryPage() {
         sku: productForm.sku.trim(),
         name: productForm.name.trim(),
         description: productForm.description.trim(),
+        skin_type: productForm.skin_type || "",
+        target_problems: productForm.target_problems || [],
+        benefits: productForm.benefits || [],
+        keywords: productForm.keywords.trim(),
         sale_price: Number(productForm.sale_price || 0).toFixed(2),
         cost_price: Number(productForm.cost_price || 0).toFixed(2),
         min_stock: Number(productForm.min_stock || 0).toFixed(2),
@@ -381,6 +403,18 @@ export function InventoryPage() {
           <p>Productos reales para compras, stock y ventas POS.</p>
         </div>
       </section>
+
+      {/* Alertas de precios para el usuario Master */}
+      {isMaster && (
+        <PricingAlertSection
+          onProductUpdated={() => {
+            loadInventory(searchTerm);
+            if (activeTab === "stock") {
+              loadStockData();
+            }
+          }}
+        />
+      )}
 
       {/* Tabs Navigation */}
       <div className="inventory-tabs">
@@ -535,6 +569,91 @@ export function InventoryPage() {
                       value={productForm.name}
                     />
                   </label>
+
+                  <div className="inventory-form-row">
+                    <label>
+                      <span>Tipo de piel / cabello (SkinType)</span>
+                      <select
+                        onChange={(event) =>
+                          updateProductField("skin_type", event.target.value)
+                        }
+                        value={productForm.skin_type}
+                      >
+                        <option value="">-- Seleccionar tipo --</option>
+                        {SKIN_TYPES.map((type) => (
+                          <option key={type.value} value={type.value}>
+                            {type.label}
+                          </option>
+                        ))}
+                      </select>
+                    </label>
+
+                    <label>
+                      <span>Beneficios del producto (ProductBenefit)</span>
+                      <select
+                        multiple
+                        size={3}
+                        onChange={(event) => {
+                          const selected = Array.from(
+                            event.target.selectedOptions,
+                            (opt) => opt.value,
+                          );
+                          updateProductField("benefits", selected);
+                        }}
+                        value={productForm.benefits}
+                        style={{ minHeight: "80px" }}
+                      >
+                        {PRODUCT_BENEFITS.map((benefit) => (
+                          <option key={benefit.value} value={benefit.value}>
+                            {benefit.label}
+                          </option>
+                        ))}
+                      </select>
+                      <small style={{ color: "#64748b", fontSize: "11px" }}>
+                        Mantén presionado Ctrl (o Cmd) para seleccionar múltiples
+                      </small>
+                    </label>
+                  </div>
+
+                  <div className="inventory-form-row">
+                    <label>
+                      <span>Problemas objetivo (TargetProblem)</span>
+                      <select
+                        multiple
+                        size={3}
+                        onChange={(event) => {
+                          const selected = Array.from(
+                            event.target.selectedOptions,
+                            (opt) => opt.value,
+                          );
+                          updateProductField("target_problems", selected);
+                        }}
+                        value={productForm.target_problems}
+                        style={{ minHeight: "80px" }}
+                      >
+                        {TARGET_PROBLEMS.map((problem) => (
+                          <option key={problem.value} value={problem.value}>
+                            {problem.label}
+                          </option>
+                        ))}
+                      </select>
+                      <small style={{ color: "#64748b", fontSize: "11px" }}>
+                        Mantén presionado Ctrl (o Cmd) para seleccionar múltiples
+                      </small>
+                    </label>
+
+                    <label>
+                      <span>Palabras clave (Keywords)</span>
+                      <input
+                        onChange={(event) =>
+                          updateProductField("keywords", event.target.value)
+                        }
+                        placeholder="Ej: brillo, espinillas, hidratante, serum"
+                        type="text"
+                        value={productForm.keywords}
+                      />
+                    </label>
+                  </div>
 
                   <label>
                     <span>Descripcion</span>

@@ -5,7 +5,16 @@ import { Card } from "../../../components/common/Card";
 import { Field } from "../../../components/common/Field";
 import { useAuth } from "../../../contexts/AuthContext";
 import { extractApiErrorMessage } from "../../../lib/apiError";
-import { listProducts } from "../../inventory/api/inventoryApi";
+import {
+  createProduct,
+  listCategories,
+  listProducts,
+} from "../../inventory/api/inventoryApi";
+import {
+  SKIN_TYPES,
+  TARGET_PROBLEMS,
+  PRODUCT_BENEFITS,
+} from "../../inventory/constants/productAttributes";
 import {
   confirmPurchase,
   createPurchase,
@@ -17,6 +26,7 @@ import {
   updateSupplier,
   deleteSupplier,
 } from "../api/purchasesApi";
+import "../../../styles/pos.css";
 import "../../../styles/purchases.css";
 
 const emptySupplierForm = {
@@ -31,6 +41,22 @@ const emptyItemForm = {
   product: "",
   qty: "1.000",
   unit_cost: "0.00",
+};
+
+const emptyQuickProductForm = {
+  name: "",
+  sku: "",
+  barcode: "",
+  category: "",
+  cost_price: "0.00",
+  sale_price: "0.00",
+  min_stock: "0.00",
+  skin_type: "",
+  target_problems: [],
+  benefits: [],
+  keywords: "",
+  description: "",
+  is_active: true,
 };
 
 const modalStyles = `
@@ -168,6 +194,69 @@ export function PurchasesPage() {
   const [error, setError] = useState(null);
   const [success, setSuccess] = useState(null);
 
+  // Autocomplete states for Supplier
+  const [supplierQuery, setSupplierQuery] = useState("");
+  const [isSupplierDropdownOpen, setIsSupplierDropdownOpen] = useState(false);
+  const [isQuickSupplierModalOpen, setIsQuickSupplierModalOpen] = useState(false);
+  const [quickSupplierForm, setQuickSupplierForm] = useState(emptySupplierForm);
+
+  // Autocomplete states for Product & Locked SKU
+  const [productQuery, setProductQuery] = useState("");
+  const [isProductDropdownOpen, setIsProductDropdownOpen] = useState(false);
+  const [selectedProduct, setSelectedProduct] = useState(null);
+  const [isQuickProductModalOpen, setIsQuickProductModalOpen] = useState(false);
+  const [quickProductForm, setQuickProductForm] = useState(emptyQuickProductForm);
+  const [isSavingProduct, setIsSavingProduct] = useState(false);
+  const [categories, setCategories] = useState([]);
+
+  const filteredSuppliers = useMemo(() => {
+    const trimmed = supplierQuery.trim().toLowerCase();
+    if (!trimmed) {
+      return suppliers.slice(0, 10);
+    }
+    return suppliers
+      .filter(
+        (s) =>
+          s.name.toLowerCase().includes(trimmed) ||
+          (s.contact_name && s.contact_name.toLowerCase().includes(trimmed)) ||
+          (s.phone && s.phone.includes(trimmed)),
+      )
+      .slice(0, 10);
+  }, [suppliers, supplierQuery]);
+
+  const hasExactSupplierMatch = useMemo(() => {
+    const trimmed = supplierQuery.trim().toLowerCase();
+    if (!trimmed) return true;
+    return suppliers.some(
+      (s) => s.name.trim().toLowerCase() === trimmed,
+    );
+  }, [suppliers, supplierQuery]);
+
+  const filteredProducts = useMemo(() => {
+    const trimmed = productQuery.trim().toLowerCase();
+    if (!trimmed) {
+      return products.slice(0, 15);
+    }
+    return products
+      .filter(
+        (p) =>
+          p.name.toLowerCase().includes(trimmed) ||
+          p.sku.toLowerCase().includes(trimmed) ||
+          (p.barcode && p.barcode.toLowerCase().includes(trimmed)),
+      )
+      .slice(0, 15);
+  }, [products, productQuery]);
+
+  const hasExactProductMatch = useMemo(() => {
+    const trimmed = productQuery.trim().toLowerCase();
+    if (!trimmed) return true;
+    return products.some(
+      (p) =>
+        p.name.trim().toLowerCase() === trimmed ||
+        p.sku.trim().toLowerCase() === trimmed,
+    );
+  }, [products, productQuery]);
+
   const totalCost = useMemo(
     () =>
       items.reduce(
@@ -188,6 +277,7 @@ export function PurchasesPage() {
         productsResponse,
         purchasesResponse,
         draftsResponse,
+        categoriesResponse,
       ] = await Promise.all([
         listSuppliers(),
         listProducts({
@@ -198,12 +288,14 @@ export function PurchasesPage() {
         }),
         listPurchases({ page_size: 10, branch: branchId }),
         listDraftPurchases({ branch: branchId }),
+        listCategories({ page_size: 100 }),
       ]);
 
       const suppliersList = unwrapResults(suppliersResponse);
       setAllSuppliers(suppliersList);
       setSuppliers(suppliersList.filter((supplier) => supplier.is_active));
       setProducts(unwrapResults(productsResponse));
+      setCategories(unwrapResults(categoriesResponse));
       setRecentPurchases(unwrapResults(purchasesResponse));
       setDraftPurchases(unwrapResults(draftsResponse));
     } catch (requestError) {
@@ -235,6 +327,177 @@ export function PurchasesPage() {
 
   function updateItemField(field, value) {
     setItemForm((current) => ({ ...current, [field]: value }));
+  }
+
+  function handleSupplierInputChange(e) {
+    const val = e.target.value;
+    setSupplierQuery(val);
+    setIsSupplierDropdownOpen(true);
+    const match = suppliers.find(
+      (s) => s.name.trim().toLowerCase() === val.trim().toLowerCase(),
+    );
+    if (match) {
+      setSupplierId(match.id);
+    } else {
+      setSupplierId("");
+    }
+  }
+
+  function handleSelectSupplier(supplier) {
+    setSupplierId(supplier.id);
+    setSupplierQuery(supplier.name);
+    setIsSupplierDropdownOpen(false);
+    setError(null);
+  }
+
+  function handleOpenQuickSupplierModal() {
+    setQuickSupplierForm({
+      ...emptySupplierForm,
+      name: supplierQuery.trim(),
+    });
+    setIsQuickSupplierModalOpen(true);
+    setIsSupplierDropdownOpen(false);
+  }
+
+  async function handleSaveQuickSupplier(event) {
+    event.preventDefault();
+    if (!quickSupplierForm.name.trim()) {
+      setError("Escribe el nombre del proveedor.");
+      return;
+    }
+
+    setIsSavingSupplier(true);
+    setError(null);
+
+    try {
+      const created = await createSupplier({
+        ...quickSupplierForm,
+        name: quickSupplierForm.name.trim(),
+        contact_name: quickSupplierForm.contact_name.trim(),
+        phone: quickSupplierForm.phone.trim(),
+        address: quickSupplierForm.address.trim(),
+        is_active: true,
+      });
+
+      setAllSuppliers((current) =>
+        [...current, created].sort((a, b) => a.name.localeCompare(b.name)),
+      );
+      setSuppliers((current) =>
+        [...current, created].sort((a, b) => a.name.localeCompare(b.name)),
+      );
+
+      setSupplierId(created.id);
+      setSupplierQuery(created.name);
+      setIsQuickSupplierModalOpen(false);
+      setSuccess(`Proveedor "${created.name}" registrado correctamente.`);
+    } catch (requestError) {
+      setError(
+        extractApiErrorMessage(requestError, "No se pudo crear el proveedor."),
+      );
+    } finally {
+      setIsSavingSupplier(false);
+    }
+  }
+
+  function handleOpenQuickProductModal() {
+    setQuickProductForm({
+      ...emptyQuickProductForm,
+      name: productQuery.trim(),
+    });
+    setIsQuickProductModalOpen(true);
+    setIsProductDropdownOpen(false);
+  }
+
+  async function handleSaveQuickProduct(e) {
+    e.preventDefault();
+    if (!quickProductForm.name.trim()) {
+      setError("Escribe el nombre del producto.");
+      return;
+    }
+
+    setIsSavingProduct(true);
+    setError(null);
+
+    try {
+      const payload = {
+        ...quickProductForm,
+        name: quickProductForm.name.trim(),
+        sku: quickProductForm.sku.trim(),
+        barcode: quickProductForm.barcode.trim() || null,
+        category: quickProductForm.category || null,
+        skin_type: quickProductForm.skin_type || "",
+        target_problems: quickProductForm.target_problems || [],
+        benefits: quickProductForm.benefits || [],
+        keywords: quickProductForm.keywords.trim(),
+        description: quickProductForm.description.trim(),
+        cost_price: Number(quickProductForm.cost_price || 0).toFixed(2),
+        sale_price: Number(quickProductForm.sale_price || 0).toFixed(2),
+        min_stock: Number(quickProductForm.min_stock || 0).toFixed(2),
+      };
+
+      const created = await createProduct(payload);
+      setProducts((current) =>
+        [...current, created].sort((a, b) => a.name.localeCompare(b.name)),
+      );
+      setSelectedProduct(created);
+      setProductQuery(created.name);
+      setItemForm((current) => ({
+        ...current,
+        product: created.id,
+        unit_cost: created.cost_price
+          ? Number(created.cost_price).toFixed(2)
+          : current.unit_cost,
+      }));
+      setIsQuickProductModalOpen(false);
+      setSuccess(`Producto "${created.name}" registrado correctamente.`);
+    } catch (err) {
+      setError(extractApiErrorMessage(err, "No se pudo crear el producto."));
+    } finally {
+      setIsSavingProduct(false);
+    }
+  }
+
+  function handleProductInputChange(e) {
+    const val = e.target.value;
+    setProductQuery(val);
+    setIsProductDropdownOpen(true);
+    setProductSearch(val);
+
+    const match = products.find(
+      (p) =>
+        p.name.trim().toLowerCase() === val.trim().toLowerCase() ||
+        p.sku.trim().toLowerCase() === val.trim().toLowerCase(),
+    );
+    if (match) {
+      setSelectedProduct(match);
+      setItemForm((current) => ({
+        ...current,
+        product: match.id,
+        unit_cost: match.cost_price
+          ? Number(match.cost_price).toFixed(2)
+          : current.unit_cost,
+      }));
+    } else {
+      setSelectedProduct(null);
+      setItemForm((current) => ({
+        ...current,
+        product: "",
+      }));
+    }
+  }
+
+  function handleSelectProduct(product) {
+    setSelectedProduct(product);
+    setProductQuery(product.name);
+    setItemForm((current) => ({
+      ...current,
+      product: product.id,
+      unit_cost: product.cost_price
+        ? Number(product.cost_price).toFixed(2)
+        : current.unit_cost,
+    }));
+    setIsProductDropdownOpen(false);
+    setError(null);
   }
 
   async function handleCreateSupplier(event) {
@@ -408,9 +671,9 @@ export function PurchasesPage() {
   }
 
   function handleAddItem() {
-    const product = products.find(
-      (candidate) => candidate.id === itemForm.product,
-    );
+    const product =
+      selectedProduct ||
+      products.find((candidate) => candidate.id === itemForm.product);
 
     if (!product) {
       setError("Selecciona un producto.");
@@ -441,6 +704,8 @@ export function PurchasesPage() {
       },
     ]);
     setItemForm(emptyItemForm);
+    setSelectedProduct(null);
+    setProductQuery("");
     setError(null);
   }
 
@@ -509,6 +774,9 @@ export function PurchasesPage() {
       setItems([]);
       setInvoiceNumber("");
       setSupplierId("");
+      setSupplierQuery("");
+      setSelectedProduct(null);
+      setProductQuery("");
       setSuccess("Compra confirmada. Stock inicial cargado.");
       await loadPurchasesData(productSearch);
     } catch (requestError) {
@@ -523,6 +791,7 @@ export function PurchasesPage() {
   function handleSelectDraft(purchase) {
     setCreatedPurchase(purchase);
     setSupplierId(purchase.supplier || "");
+    setSupplierQuery(purchase.supplier_name || "");
     setInvoiceNumber(purchase.invoice_number || "");
 
     const mappedItems = (purchase.items || []).map((item) => ({
@@ -553,6 +822,9 @@ export function PurchasesPage() {
         setItems([]);
         setInvoiceNumber("");
         setSupplierId("");
+        setSupplierQuery("");
+        setSelectedProduct(null);
+        setProductQuery("");
       }
       await loadPurchasesData(productSearch);
     } catch (requestError) {
@@ -734,60 +1006,174 @@ export function PurchasesPage() {
 
             <form className="purchase-form" onSubmit={handleCreatePurchase}>
               <div className="purchases-form-row">
-                <label>
-                  <span>Proveedor</span>
-                  <select
-                    onChange={(event) => setSupplierId(event.target.value)}
-                    required
-                    value={supplierId}
-                  >
-                    <option value="">Seleccionar</option>
-                    {suppliers.map((supplier) => (
-                      <option key={supplier.id} value={supplier.id}>
-                        {supplier.name}
-                      </option>
-                    ))}
-                  </select>
-                </label>
+                <div className="autocomplete-container">
+                  <label>
+                    <span>Proveedor</span>
+                    <input
+                      type="text"
+                      className="field__input"
+                      placeholder="Buscar o escribir proveedor..."
+                      value={supplierQuery}
+                      onChange={handleSupplierInputChange}
+                      onFocus={() => setIsSupplierDropdownOpen(true)}
+                      onBlur={() =>
+                        setTimeout(() => setIsSupplierDropdownOpen(false), 200)
+                      }
+                      autoComplete="off"
+                      required
+                    />
+                  </label>
+                  {isSupplierDropdownOpen && filteredSuppliers.length > 0 && (
+                    <ul className="autocomplete-dropdown">
+                      {filteredSuppliers.map((supplier) => (
+                        <li
+                          key={supplier.id}
+                          className="autocomplete-item"
+                          onMouseDown={() => handleSelectSupplier(supplier)}
+                        >
+                          <div>
+                            <span className="autocomplete-item-title">
+                              {supplier.name}
+                            </span>
+                            {supplier.contact_name && (
+                              <span
+                                className="autocomplete-item-subtitle"
+                                style={{ display: "block" }}
+                              >
+                                Contacto: {supplier.contact_name}
+                              </span>
+                            )}
+                          </div>
+                          {supplier.phone && (
+                            <span style={{ fontSize: "0.75rem", color: "#64748b" }}>
+                              {supplier.phone}
+                            </span>
+                          )}
+                        </li>
+                      ))}
+                    </ul>
+                  )}
+                  {supplierQuery.trim() !== "" && !hasExactSupplierMatch && (
+                    <div style={{ marginTop: "0.5rem" }}>
+                      <button
+                        type="button"
+                        className="btn btn--primary"
+                        style={{
+                          display: "inline-flex",
+                          alignItems: "center",
+                          gap: "0.35rem",
+                          padding: "0.45rem 0.85rem",
+                          fontSize: "0.85rem",
+                          fontWeight: 600,
+                          width: "100%",
+                          justifyContent: "center",
+                        }}
+                        onClick={handleOpenQuickSupplierModal}
+                      >
+                        Crear proveedor &ldquo;{supplierQuery.trim()}&rdquo;
+                      </button>
+                    </div>
+                  )}
+                </div>
+
                 <label>
                   <span>Factura</span>
                   <input
                     onChange={(event) => setInvoiceNumber(event.target.value)}
                     placeholder="Opcional"
                     type="text"
+                    className="field__input"
                     value={invoiceNumber}
                   />
                 </label>
               </div>
 
               <div className="purchase-item-picker">
-                <label>
-                  <span>Buscar producto</span>
-                  <input
-                    onChange={(event) => setProductSearch(event.target.value)}
-                    placeholder="SKU o nombre"
-                    type="search"
-                    value={productSearch}
-                  />
-                </label>
-
                 <div className="purchase-item-form">
+                  <div className="autocomplete-container">
+                    <label>
+                      <span>Producto</span>
+                      <input
+                        type="text"
+                        className="field__input"
+                        placeholder="Buscar producto..."
+                        value={productQuery}
+                        onChange={handleProductInputChange}
+                        onFocus={() => setIsProductDropdownOpen(true)}
+                        onBlur={() =>
+                          setTimeout(() => setIsProductDropdownOpen(false), 200)
+                        }
+                        autoComplete="off"
+                      />
+                    </label>
+                    {isProductDropdownOpen && filteredProducts.length > 0 && (
+                      <ul className="autocomplete-dropdown">
+                        {filteredProducts.map((prod) => (
+                          <li
+                            key={prod.id}
+                            className="autocomplete-item"
+                            onMouseDown={() => handleSelectProduct(prod)}
+                          >
+                            <div>
+                              <span className="autocomplete-item-title">
+                                {prod.name}
+                              </span>
+                              <span
+                                className="autocomplete-item-subtitle"
+                                style={{ display: "block" }}
+                              >
+                                SKU: {prod.sku}
+                              </span>
+                            </div>
+                            <span style={{ fontSize: "0.8rem", color: "#64748b" }}>
+                              Q {Number(prod.cost_price || 0).toFixed(2)}
+                            </span>
+                          </li>
+                        ))}
+                      </ul>
+                    )}
+                    {productQuery.trim() !== "" && !hasExactProductMatch && (
+                      <div style={{ marginTop: "0.5rem" }}>
+                        <button
+                          type="button"
+                          className="btn btn--primary"
+                          style={{
+                            display: "inline-flex",
+                            alignItems: "center",
+                            gap: "0.35rem",
+                            padding: "0.45rem 0.85rem",
+                            fontSize: "0.85rem",
+                            fontWeight: 600,
+                            width: "100%",
+                            justifyContent: "center",
+                          }}
+                          onClick={handleOpenQuickProductModal}
+                        >
+                          Crear producto &ldquo;{productQuery.trim()}&rdquo;
+                        </button>
+                      </div>
+                    )}
+                  </div>
+
                   <label>
-                    <span>Producto</span>
-                    <select
-                      onChange={(event) =>
-                        updateItemField("product", event.target.value)
-                      }
-                      value={itemForm.product}
-                    >
-                      <option value="">Seleccionar producto</option>
-                      {products.map((product) => (
-                        <option key={product.id} value={product.id}>
-                          {product.sku} - {product.name}
-                        </option>
-                      ))}
-                    </select>
+                    <span>SKU</span>
+                    <input
+                      type="text"
+                      className="field__input"
+                      value={selectedProduct ? selectedProduct.sku : ""}
+                      readOnly
+                      disabled
+                      placeholder="SKU"
+                      style={{
+                        backgroundColor: "#f8fafc",
+                        color: "#334155",
+                        cursor: "not-allowed",
+                        fontWeight: 600,
+                      }}
+                      title="El SKU se autocompleta automáticamente y está bloqueado."
+                    />
                   </label>
+
                   <label>
                     <span>Cantidad</span>
                     <input
@@ -797,9 +1183,11 @@ export function PurchasesPage() {
                       }
                       step="0.001"
                       type="number"
+                      className="field__input"
                       value={itemForm.qty}
                     />
                   </label>
+
                   <label>
                     <span>Costo</span>
                     <input
@@ -809,9 +1197,11 @@ export function PurchasesPage() {
                       }
                       step="0.01"
                       type="number"
+                      className="field__input"
                       value={itemForm.unit_cost}
                     />
                   </label>
+
                   <Button
                     onClick={handleAddItem}
                     type="button"
@@ -1228,6 +1618,382 @@ export function PurchasesPage() {
                 </form>
               </div>
             </Card>
+          </div>
+        </div>
+      )}
+
+      {isQuickSupplierModalOpen && (
+        <div
+          className="pos-modal-backdrop"
+          role="presentation"
+          onClick={() => setIsQuickSupplierModalOpen(false)}
+        >
+          <div
+            className="pos-modal"
+            role="dialog"
+            aria-modal="true"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <h2>Crear proveedor</h2>
+            <p>Registra el nuevo proveedor para seleccionarlo en la compra.</p>
+            <form onSubmit={handleSaveQuickSupplier}>
+              <div style={{ display: "grid", gap: "0.75rem", marginBottom: "1rem" }}>
+                <label style={{ display: "grid", gap: "0.25rem" }}>
+                  <span style={{ fontSize: "0.85rem", fontWeight: 600 }}>
+                    Nombre comercial *
+                  </span>
+                  <input
+                    type="text"
+                    className="field__input"
+                    required
+                    autoFocus
+                    value={quickSupplierForm.name}
+                    onChange={(e) =>
+                      setQuickSupplierForm((prev) => ({
+                        ...prev,
+                        name: e.target.value,
+                      }))
+                    }
+                    placeholder="Nombre del proveedor"
+                  />
+                </label>
+                <label style={{ display: "grid", gap: "0.25rem" }}>
+                  <span style={{ fontSize: "0.85rem", fontWeight: 600 }}>
+                    Contacto
+                  </span>
+                  <input
+                    type="text"
+                    className="field__input"
+                    value={quickSupplierForm.contact_name}
+                    onChange={(e) =>
+                      setQuickSupplierForm((prev) => ({
+                        ...prev,
+                        contact_name: e.target.value,
+                      }))
+                    }
+                    placeholder="Nombre de la persona de contacto"
+                  />
+                </label>
+                <label style={{ display: "grid", gap: "0.25rem" }}>
+                  <span style={{ fontSize: "0.85rem", fontWeight: 600 }}>
+                    Teléfono
+                  </span>
+                  <input
+                    type="text"
+                    className="field__input"
+                    value={quickSupplierForm.phone}
+                    onChange={(e) =>
+                      setQuickSupplierForm((prev) => ({
+                        ...prev,
+                        phone: e.target.value,
+                      }))
+                    }
+                    placeholder="Número de teléfono"
+                  />
+                </label>
+                <label style={{ display: "grid", gap: "0.25rem" }}>
+                  <span style={{ fontSize: "0.85rem", fontWeight: 600 }}>
+                    Dirección
+                  </span>
+                  <input
+                    type="text"
+                    className="field__input"
+                    value={quickSupplierForm.address}
+                    onChange={(e) =>
+                      setQuickSupplierForm((prev) => ({
+                        ...prev,
+                        address: e.target.value,
+                      }))
+                    }
+                    placeholder="Dirección comercial"
+                  />
+                </label>
+              </div>
+              <div className="pos-modal__actions">
+                <Button
+                  type="button"
+                  variant="secondary"
+                  onClick={() => setIsQuickSupplierModalOpen(false)}
+                >
+                  Cancelar
+                </Button>
+                <button
+                  type="submit"
+                  className="btn btn--primary"
+                  disabled={isSavingSupplier}
+                >
+                  {isSavingSupplier ? "Guardando..." : "Guardar proveedor"}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {isQuickProductModalOpen && (
+        <div
+          className="pos-modal-backdrop"
+          role="presentation"
+          onClick={() => setIsQuickProductModalOpen(false)}
+        >
+          <div
+            className="pos-modal pos-modal--wide"
+            role="dialog"
+            aria-modal="true"
+            onClick={(e) => e.stopPropagation()}
+            style={{ maxHeight: "90vh", overflowY: "auto" }}
+          >
+            <h2>Crear producto</h2>
+            <p>Registra el nuevo producto para agregarlo a la orden de compra.</p>
+            <form onSubmit={handleSaveQuickProduct}>
+              <div style={{ display: "grid", gap: "0.75rem", marginBottom: "1rem" }}>
+                <label style={{ display: "grid", gap: "0.25rem" }}>
+                  <span style={{ fontSize: "0.85rem", fontWeight: 600 }}>
+                    Nombre del producto *
+                  </span>
+                  <input
+                    type="text"
+                    className="field__input"
+                    required
+                    autoFocus
+                    value={quickProductForm.name}
+                    onChange={(e) =>
+                      setQuickProductForm((prev) => ({
+                        ...prev,
+                        name: e.target.value,
+                      }))
+                    }
+                    placeholder="Nombre completo del producto"
+                  />
+                </label>
+
+                <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "0.75rem" }}>
+                  <label style={{ display: "grid", gap: "0.25rem" }}>
+                    <span style={{ fontSize: "0.85rem", fontWeight: 600 }}>
+                      SKU (opcional)
+                    </span>
+                    <input
+                      type="text"
+                      className="field__input"
+                      value={quickProductForm.sku}
+                      onChange={(e) =>
+                        setQuickProductForm((prev) => ({
+                          ...prev,
+                          sku: e.target.value,
+                        }))
+                      }
+                      placeholder="Autogenerado si está vacío"
+                    />
+                  </label>
+                  <label style={{ display: "grid", gap: "0.25rem" }}>
+                    <span style={{ fontSize: "0.85rem", fontWeight: 600 }}>
+                      Categoría
+                    </span>
+                    <select
+                      className="field__input"
+                      value={quickProductForm.category}
+                      onChange={(e) =>
+                        setQuickProductForm((prev) => ({
+                          ...prev,
+                          category: e.target.value,
+                        }))
+                      }
+                    >
+                      <option value="">Sin categoría</option>
+                      {categories.map((c) => (
+                        <option key={c.id} value={c.id}>
+                          {c.name}
+                        </option>
+                      ))}
+                    </select>
+                  </label>
+                </div>
+
+                <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "0.75rem" }}>
+                  <label style={{ display: "grid", gap: "0.25rem" }}>
+                    <span style={{ fontSize: "0.85rem", fontWeight: 600 }}>
+                      Precio Costo (Q) *
+                    </span>
+                    <input
+                      type="number"
+                      step="0.01"
+                      min="0"
+                      className="field__input"
+                      value={quickProductForm.cost_price}
+                      onChange={(e) =>
+                        setQuickProductForm((prev) => ({
+                          ...prev,
+                          cost_price: e.target.value,
+                        }))
+                      }
+                    />
+                  </label>
+                  <label style={{ display: "grid", gap: "0.25rem" }}>
+                    <span style={{ fontSize: "0.85rem", fontWeight: 600 }}>
+                      Precio Venta (Q) *
+                    </span>
+                    <input
+                      type="number"
+                      step="0.01"
+                      min="0"
+                      className="field__input"
+                      value={quickProductForm.sale_price}
+                      onChange={(e) =>
+                        setQuickProductForm((prev) => ({
+                          ...prev,
+                          sale_price: e.target.value,
+                        }))
+                      }
+                    />
+                  </label>
+                </div>
+
+                {/* Standardized selects for skin_type, benefits, target_problems */}
+                <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "0.75rem" }}>
+                  <label style={{ display: "grid", gap: "0.25rem" }}>
+                    <span style={{ fontSize: "0.85rem", fontWeight: 600 }}>
+                      Tipo de Piel / Cabello (SkinType)
+                    </span>
+                    <select
+                      className="field__input"
+                      value={quickProductForm.skin_type}
+                      onChange={(e) =>
+                        setQuickProductForm((prev) => ({
+                          ...prev,
+                          skin_type: e.target.value,
+                        }))
+                      }
+                    >
+                      <option value="">-- Seleccionar tipo --</option>
+                      {SKIN_TYPES.map((type) => (
+                        <option key={type.value} value={type.value}>
+                          {type.label}
+                        </option>
+                      ))}
+                    </select>
+                  </label>
+
+                  <label style={{ display: "grid", gap: "0.25rem" }}>
+                    <span style={{ fontSize: "0.85rem", fontWeight: 600 }}>
+                      Beneficios (ProductBenefit)
+                    </span>
+                    <select
+                      multiple
+                      size={3}
+                      className="field__input"
+                      style={{ minHeight: "75px" }}
+                      value={quickProductForm.benefits}
+                      onChange={(e) => {
+                        const selected = Array.from(
+                          e.target.selectedOptions,
+                          (opt) => opt.value,
+                        );
+                        setQuickProductForm((prev) => ({
+                          ...prev,
+                          benefits: selected,
+                        }));
+                      }}
+                    >
+                      {PRODUCT_BENEFITS.map((benefit) => (
+                        <option key={benefit.value} value={benefit.value}>
+                          {benefit.label}
+                        </option>
+                      ))}
+                    </select>
+                    <small style={{ color: "#64748b", fontSize: "11px" }}>
+                      Ctrl/Cmd + clic para múltiples
+                    </small>
+                  </label>
+                </div>
+
+                <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "0.75rem" }}>
+                  <label style={{ display: "grid", gap: "0.25rem" }}>
+                    <span style={{ fontSize: "0.85rem", fontWeight: 600 }}>
+                      Problemas Objetivo (TargetProblem)
+                    </span>
+                    <select
+                      multiple
+                      size={3}
+                      className="field__input"
+                      style={{ minHeight: "75px" }}
+                      value={quickProductForm.target_problems}
+                      onChange={(e) => {
+                        const selected = Array.from(
+                          e.target.selectedOptions,
+                          (opt) => opt.value,
+                        );
+                        setQuickProductForm((prev) => ({
+                          ...prev,
+                          target_problems: selected,
+                        }));
+                      }}
+                    >
+                      {TARGET_PROBLEMS.map((problem) => (
+                        <option key={problem.value} value={problem.value}>
+                          {problem.label}
+                        </option>
+                      ))}
+                    </select>
+                    <small style={{ color: "#64748b", fontSize: "11px" }}>
+                      Ctrl/Cmd + clic para múltiples
+                    </small>
+                  </label>
+
+                  <label style={{ display: "grid", gap: "0.25rem" }}>
+                    <span style={{ fontSize: "0.85rem", fontWeight: 600 }}>
+                      Palabras clave (Keywords)
+                    </span>
+                    <input
+                      type="text"
+                      className="field__input"
+                      placeholder="Ej: hidratante, antiarrugas, serum"
+                      value={quickProductForm.keywords}
+                      onChange={(e) =>
+                        setQuickProductForm((prev) => ({
+                          ...prev,
+                          keywords: e.target.value,
+                        }))
+                      }
+                    />
+                  </label>
+                </div>
+
+                <label style={{ display: "grid", gap: "0.25rem" }}>
+                  <span style={{ fontSize: "0.85rem", fontWeight: 600 }}>
+                    Descripción
+                  </span>
+                  <textarea
+                    rows={2}
+                    className="field__input"
+                    value={quickProductForm.description}
+                    onChange={(e) =>
+                      setQuickProductForm((prev) => ({
+                        ...prev,
+                        description: e.target.value,
+                      }))
+                    }
+                    placeholder="Descripción detallada del producto..."
+                  />
+                </label>
+              </div>
+
+              <div className="pos-modal__actions">
+                <Button
+                  type="button"
+                  variant="secondary"
+                  onClick={() => setIsQuickProductModalOpen(false)}
+                >
+                  Cancelar
+                </Button>
+                <button
+                  type="submit"
+                  className="btn btn--primary"
+                  disabled={isSavingProduct}
+                >
+                  {isSavingProduct ? "Guardando..." : "Guardar y Seleccionar"}
+                </button>
+              </div>
+            </form>
           </div>
         </div>
       )}

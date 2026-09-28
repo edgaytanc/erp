@@ -10,11 +10,34 @@ export function ProductSearch({
   onHighlight,
   onSearchTermChange,
   isLoading,
+  onOpenRecommendation,
 }) {
   return (
     <div className="search-section">
-      <h3>Buscar producto</h3>
-      <p>Nombre, SKU o código de barra</p>
+      <div
+        style={{
+          display: "flex",
+          justifyContent: "space-between",
+          alignItems: "flex-start",
+          gap: "12px",
+          marginBottom: "4px",
+        }}
+      >
+        <div>
+          <h3>Buscar producto</h3>
+          <p>Nombre, SKU o código de barra</p>
+        </div>
+        <button
+          type="button"
+          className="btn-recommend"
+          onClick={onOpenRecommendation}
+          disabled={disabled}
+          title="Recomendar productos al cliente por necesidades o problemas"
+        >
+          ✨ Recomendar producto
+        </button>
+      </div>
+
       <input
         autoFocus
         className="search-input"

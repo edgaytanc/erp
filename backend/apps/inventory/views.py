@@ -2,23 +2,35 @@ from __future__ import annotations
 
 import csv
 import io
+import re
 from decimal import Decimal, InvalidOperation
 
+from django.contrib.postgres.search import SearchQuery, SearchRank, SearchVector
 from django.db import transaction
-from django.db.models import Count, F, Max, Q, Sum
+from django.db.models import Case, Count, F, Max, OuterRef, Q, Subquery, Sum, TextField, Value, When
+from django.db.models.functions import Concat
 from django.http import HttpResponse
-from rest_framework import mixins, status, viewsets
+from rest_framework import mixins, status, views, viewsets
 from rest_framework.decorators import action
 from rest_framework.filters import OrderingFilter
 from rest_framework.pagination import PageNumberPagination
-from rest_framework.parsers import MultiPartParser, FormParser
+from rest_framework.parsers import FormParser, MultiPartParser
 from rest_framework.response import Response
 
 from apps.accounts.permissions import ModuleRolePermission
 
-from .models import Category, Product, Stock, StockMovement
+from .models import (
+    Category,
+    Product,
+    ProductBenefit,
+    SkinType,
+    Stock,
+    StockMovement,
+    TargetProblem,
+)
 from .serializers import (
     CategorySerializer,
+    ProductRecommendationSerializer,
     ProductSerializer,
     StockMovementSerializer,
     StockSerializer,
@@ -81,7 +93,10 @@ class ProductViewSet(viewsets.ModelViewSet):
         is_active = self.request.query_params.get("is_active")
         sku = self.request.query_params.get("sku")
         barcode = self.request.query_params.get("barcode")
+        name = self.request.query_params.get("name")
+        skin_type = self.request.query_params.get("skin_type")
         q = self.request.query_params.get("q")
+        search = self.request.query_params.get("search")
 
         if category_id:
             qs = qs.filter(category_id=category_id)
@@ -97,12 +112,29 @@ class ProductViewSet(viewsets.ModelViewSet):
         if barcode:
             qs = qs.filter(barcode__icontains=barcode)
 
-        if q:
+        if name:
+            qs = qs.filter(name__icontains=name)
+
+        if skin_type:
+            qs = qs.filter(skin_type=skin_type)
+
+        search_term = q or search
+        if search_term:
             qs = qs.filter(
-                Q(name__icontains=q)
-                | Q(sku__icontains=q)
-                | Q(barcode__icontains=q)
-                | Q(description__icontains=q)
+                Q(name__icontains=search_term)
+                | Q(sku__icontains=search_term)
+                | Q(barcode__icontains=search_term)
+                | Q(description__icontains=search_term)
+                | Q(keywords__icontains=search_term)
+            )
+
+        needs_pricing = self.request.query_params.get("needs_pricing")
+        if needs_pricing in ("1", "true", "True"):
+            qs = qs.filter(
+                Q(sale_price__lte=Decimal("0.00"))
+                | Q(cost_price__lte=Decimal("0.00"))
+                | Q(sale_price__isnull=True)
+                | Q(cost_price__isnull=True)
             )
 
         return qs.order_by(*self.ordering)
@@ -112,6 +144,45 @@ class ProductViewSet(viewsets.ModelViewSet):
         product.is_active = False
         product.save(update_fields=["is_active", "updated_at"])
         return Response(status=204)
+
+    @action(detail=False, methods=["get"], url_path="needs-pricing")
+    def needs_pricing(self, request):
+        """
+        GET /api/inventory/products/needs-pricing/
+        Retorna los productos activos que requieren actualización de precios (precio_venta <= 0 o precio_costo <= 0).
+        """
+        qs = (
+            self.get_queryset()
+            .filter(
+                Q(sale_price__lte=Decimal("0.00"))
+                | Q(cost_price__lte=Decimal("0.00"))
+                | Q(sale_price__isnull=True)
+                | Q(cost_price__isnull=True)
+            )
+            .filter(is_active=True)
+            .order_by("-created_at")
+        )
+        page = self.paginate_queryset(qs)
+        if page is not None:
+            serializer = self.get_serializer(page, many=True)
+            return self.get_paginated_response(serializer.data)
+        serializer = self.get_serializer(qs, many=True)
+        return Response(serializer.data)
+
+    @action(detail=False, methods=["get"], url_path="attribute-choices")
+    def attribute_choices(self, request):
+        """
+        GET /api/inventory/products/attribute-choices/
+        Retorna el diccionario de opciones disponibles para SkinType, TargetProblem y ProductBenefit.
+        """
+        return Response(
+            {
+                "skin_types": [{"value": val, "label": lbl} for val, lbl in SkinType.choices],
+                "target_problems": [{"value": val, "label": lbl} for val, lbl in TargetProblem.choices],
+                "benefits": [{"value": val, "label": lbl} for val, lbl in ProductBenefit.choices],
+            },
+            status=status.HTTP_200_OK,
+        )
 
     @action(
         detail=False,
@@ -160,6 +231,10 @@ class ProductViewSet(viewsets.ModelViewSet):
         seen_skus = set()
         seen_barcodes = set()
 
+        valid_skin_types = set(SkinType.values)
+        valid_problems = set(TargetProblem.values)
+        valid_benefits = set(ProductBenefit.values)
+
         for index, row in enumerate(reader, start=2):
             row_sku = (row.get("sku") or "").strip().upper()
             row_name = (row.get("name") or "").strip()
@@ -169,6 +244,10 @@ class ProductViewSet(viewsets.ModelViewSet):
             row_barcode = (row.get("barcode") or "").strip()
             row_description = (row.get("description") or "").strip()
             row_category_name = (row.get("category") or row.get("category_name") or "").strip()
+            row_skin_type = (row.get("skin_type") or "").strip().upper()
+            row_keywords = (row.get("keywords") or "").strip()
+            row_target_problems_raw = (row.get("target_problems") or "").strip()
+            row_benefits_raw = (row.get("benefits") or "").strip()
             row_is_active_str = (row.get("is_active") or "true").strip().lower()
 
             row_errors = []
@@ -221,6 +300,22 @@ class ProductViewSet(viewsets.ModelViewSet):
                             f"El código de barras '{row_barcode}' ya está registrado en el producto '{conflicting_product.sku}'."
                         )
 
+            skin_type = row_skin_type if row_skin_type in valid_skin_types else ""
+
+            target_problems = []
+            if row_target_problems_raw:
+                for p in row_target_problems_raw.replace(";", ",").split(","):
+                    p_clean = p.strip().upper()
+                    if p_clean in valid_problems and p_clean not in target_problems:
+                        target_problems.append(p_clean)
+
+            benefits = []
+            if row_benefits_raw:
+                for b in row_benefits_raw.replace(";", ",").split(","):
+                    b_clean = b.strip().upper()
+                    if b_clean in valid_benefits and b_clean not in benefits:
+                        benefits.append(b_clean)
+
             is_active = row_is_active_str not in ("false", "0", "no", "inactive")
 
             if row_errors:
@@ -236,6 +331,10 @@ class ProductViewSet(viewsets.ModelViewSet):
                         "barcode": row_barcode or None,
                         "description": row_description,
                         "category_name": row_category_name,
+                        "skin_type": skin_type,
+                        "target_problems": target_problems,
+                        "benefits": benefits,
+                        "keywords": row_keywords,
                         "is_active": is_active,
                     }
                 )
@@ -279,6 +378,10 @@ class ProductViewSet(viewsets.ModelViewSet):
                             "barcode": item["barcode"],
                             "description": item["description"],
                             "category": category_obj,
+                            "skin_type": item["skin_type"],
+                            "target_problems": item["target_problems"],
+                            "benefits": item["benefits"],
+                            "keywords": item["keywords"],
                             "is_active": item["is_active"],
                         },
                     )
@@ -290,6 +393,14 @@ class ProductViewSet(viewsets.ModelViewSet):
                         product.min_stock = item["min_stock"]
                         product.barcode = item["barcode"]
                         product.description = item["description"]
+                        if item["skin_type"]:
+                            product.skin_type = item["skin_type"]
+                        if item["target_problems"]:
+                            product.target_problems = item["target_problems"]
+                        if item["benefits"]:
+                            product.benefits = item["benefits"]
+                        if item["keywords"]:
+                            product.keywords = item["keywords"]
                         if category_obj:
                             product.category = category_obj
                         product.is_active = item["is_active"]
@@ -335,43 +446,179 @@ class ProductViewSet(viewsets.ModelViewSet):
         writer.writerow(
             [
                 "PROD001",
-                "Coca Cola 350ml",
-                "Lata de Coca Cola de 350ml",
-                "1.50",
-                "1.00",
+                "Gel Limpiador Facial Ácido Salicílico",
+                "Limpiador espumoso para poros y control de grasa.",
+                "125.00",
+                "75.00",
                 "10.00",
-                "Bebidas",
+                "Cuidado Facial",
                 "7401005123456",
+                "GRASA",
+                "ACNE,ROJEZ",
+                "SEBOCONT,CALMANTE",
+                "limpiador sebo granos espinillas poros",
                 "true",
             ]
         )
         writer.writerow(
             [
                 "PROD002",
-                "Papas Fritas Naturales",
-                "Bolsa de papas fritas naturales 50g",
-                "2.00",
-                "1.30",
+                "Serum Ácido Hialurónico Concentrado",
+                "Hidratación profunda efecto relleno para líneas de expresión.",
+                "190.00",
+                "110.00",
                 "15.00",
-                "Snacks",
+                "Cuidado Facial",
                 "7401005123457",
+                "TODO",
+                "ARRUGAS",
+                "HIDRAT,ANTIAGE",
+                "suero arrugas lineas hidratacion firmeza",
                 "true",
             ]
         )
         writer.writerow(
             [
                 "PROD003",
-                "Agua Purificada 500ml",
-                "Botella de agua purificada",
-                "1.00",
-                "0.50",
+                "Shampoo Fortificante Anti-Caída",
+                "Estimula el folículo capilar y frena la caída.",
+                "85.00",
+                "45.00",
                 "20.00",
-                "Bebidas",
+                "Cuidado Capilar",
                 "",
+                "CAB_GRASO",
+                "CAIDA,CASPA",
+                "ESTIMCAP",
+                "shampoo pelo cuero cabelludo caida",
                 "true",
             ]
         )
         return response
+
+
+class PosRecommendationView(views.APIView):
+    """
+    GET /api/pos/recommendations/?q=<texto>&branch_id=<UUID>
+    Busca semánticamente productos recomendados en base a PostgreSQL Full-Text Search
+    (SearchVector, SearchQuery, SearchRank) ponderando nombre, keywords, beneficios,
+    problemas específicos, tipo de piel y descripción.
+    Filtra estrictamente por productos con stock > 0 en la sucursal indicada y los ordena por SearchRank descendente.
+    """
+    module_name = "sales"
+    permission_classes = [ModuleRolePermission]
+
+    def get(self, request):
+        q = request.query_params.get("q", "").strip()
+        branch_id = request.query_params.get("branch_id") or request.query_params.get("branch")
+
+        if not branch_id:
+            return Response(
+                {"detail": "El parámetro 'branch_id' es requerido."},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        if not q:
+            return Response([], status=status.HTTP_200_OK)
+
+        # Subquery para obtener la cantidad exacta de stock disponible en la sucursal indicada
+        stock_subquery = Stock.objects.filter(
+            branch_id=branch_id,
+            product_id=OuterRef("pk"),
+        ).values("qty_on_hand")[:1]
+
+        # Filtro estricto: producto activo y con stock > 0 en la sucursal indicada
+        qs = (
+            Product.objects.filter(
+                is_active=True,
+                stocks__branch_id=branch_id,
+                stocks__qty_on_hand__gt=Decimal("0.00"),
+            )
+            .annotate(stock_qty=Subquery(stock_subquery))
+            .distinct()
+        )
+
+        # Construcción de representaciones legibles para los TextChoices (SkinType, TargetProblem, ProductBenefit)
+        skin_type_cases = [
+            When(skin_type=choice.value, then=Value(f"{choice.label} {choice.value} "))
+            for choice in SkinType
+        ]
+        skin_type_expr = Case(*skin_type_cases, default=Value(""), output_field=TextField())
+
+        target_problem_cases = [
+            Case(
+                When(target_problems__contains=[choice.value], then=Value(f"{choice.label} {choice.value} ")),
+                default=Value(""),
+                output_field=TextField(),
+            )
+            for choice in TargetProblem
+        ]
+        target_problems_expr = Concat(*target_problem_cases, output_field=TextField())
+
+        benefit_cases = [
+            Case(
+                When(benefits__contains=[choice.value], then=Value(f"{choice.label} {choice.value} ")),
+                default=Value(""),
+                output_field=TextField(),
+            )
+            for choice in ProductBenefit
+        ]
+        benefits_expr = Concat(*benefit_cases, output_field=TextField())
+
+        # Anotación de los textos legibles combinados
+        qs = qs.annotate(
+            _search_skin_type=skin_type_expr,
+            _search_target_problems=target_problems_expr,
+            _search_benefits=benefits_expr,
+        )
+
+        # SearchVector con ponderaciones estratégicas de PostgreSQL:
+        # Peso A: Nombre del producto y palabras clave (keywords)
+        # Peso B: Beneficios, problemas objetivo y tipo de piel (con sus representaciones legibles)
+        # Peso C: Descripción del producto
+        search_vector = (
+            SearchVector("name", weight="A", config="spanish")
+            + SearchVector("keywords", weight="A", config="spanish")
+            + SearchVector("_search_benefits", weight="B", config="spanish")
+            + SearchVector("_search_target_problems", weight="B", config="spanish")
+            + SearchVector("_search_skin_type", weight="B", config="spanish")
+            + SearchVector("description", weight="C", config="spanish")
+        )
+
+        # Tokenización de términos significativos para soportar consultas conversacionales
+        tokens = [
+            t.strip()
+            for t in re.findall(r"[\wáéíóúüñÁÉÍÓÚÜÑ]+", q, flags=re.UNICODE)
+            if len(t.strip()) >= 2
+        ]
+
+        search_query_web = SearchQuery(q, config="spanish", search_type="websearch")
+        if tokens:
+            token_query = SearchQuery(tokens[0], config="spanish")
+            for token in tokens[1:]:
+                token_query = token_query | SearchQuery(token, config="spanish")
+            combined_query = search_query_web | token_query
+        else:
+            combined_query = search_query_web
+
+        # Cálculo de SearchRank y filtrado de resultados relevantes
+        ranked_qs = (
+            qs.annotate(
+                search_vector=search_vector,
+                rank=SearchRank(search_vector, combined_query),
+            )
+            .filter(rank__gt=0.0001)
+            .order_by("-rank", "name")
+        )
+
+        limit_raw = request.query_params.get("limit", "20")
+        try:
+            limit = max(1, min(int(limit_raw), 50))
+        except ValueError:
+            limit = 20
+
+        serializer = ProductRecommendationSerializer(ranked_qs[:limit], many=True)
+        return Response(serializer.data, status=status.HTTP_200_OK)
 
 
 class StockMovementViewSet(viewsets.ReadOnlyModelViewSet):

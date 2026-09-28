@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from django.db.models import Q
 from rest_framework import viewsets, status
 from rest_framework.decorators import action
 from rest_framework.exceptions import ValidationError
@@ -15,8 +16,33 @@ from .services import confirm_purchase, cancel_purchase
 class SupplierViewSet(viewsets.ModelViewSet):
     module_name = "purchases"
     permission_classes = [ModuleRolePermission]
-    queryset = Supplier.objects.all().order_by("name")
     serializer_class = SupplierSerializer
+
+    def get_queryset(self):
+        qs = Supplier.objects.all().order_by("name")
+
+        name = self.request.query_params.get("name")
+        q = self.request.query_params.get("q")
+        search = self.request.query_params.get("search")
+        is_active = self.request.query_params.get("is_active")
+
+        if is_active in ("1", "true", "True"):
+            qs = qs.filter(is_active=True)
+        elif is_active in ("0", "false", "False"):
+            qs = qs.filter(is_active=False)
+
+        if name:
+            qs = qs.filter(name__icontains=name)
+
+        search_term = q or search
+        if search_term:
+            qs = qs.filter(
+                Q(name__icontains=search_term)
+                | Q(contact_name__icontains=search_term)
+                | Q(phone__icontains=search_term)
+            )
+
+        return qs
 
 
 class PurchaseViewSet(viewsets.ModelViewSet):

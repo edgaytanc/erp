@@ -5,9 +5,9 @@ from decimal import Decimal, ROUND_HALF_UP
 from django.db import transaction
 from django.utils import timezone
 
-from apps.inventory.services import apply_inventory_movement, BusinessRuleError
-from apps.inventory.models import StockMovement, ReferenceType
+from apps.inventory.services import BusinessRuleError
 from .models import Purchase, PurchaseStatus
+from .inventory_integration import sync_purchase_inventory
 
 
 class PurchaseServiceError(BusinessRuleError):
@@ -64,22 +64,6 @@ def confirm_purchase(purchase_id) -> Purchase:
 
         total_cost += item.subtotal
 
-        apply_inventory_movement(
-            branch=purchase.branch,
-            product=item.product,
-            movement_type=StockMovement.Type.IN,
-            qty=item.qty,
-            unit_cost=item.unit_cost,
-            reference_type=ReferenceType.PURCHASE,
-            reference_id=purchase.id,
-            note=f"Compra confirmada. Factura: {purchase.invoice_number or '-'}",
-            prevent_negative=True,
-        )
-
-        if item.product.cost_price != item.unit_cost:
-            item.product.cost_price = item.unit_cost
-            item.product.save(update_fields=["cost_price", "updated_at"])
-
     purchase.total_cost = _money(total_cost)
     purchase.status = PurchaseStatus.CONFIRMED
     purchase.purchased_at = purchase.purchased_at or timezone.now()
@@ -95,6 +79,10 @@ def confirm_purchase(purchase_id) -> Purchase:
             "updated_at",
         ]
     )
+
+    # Sincroniza inventario en la sucursal de la compra
+    sync_purchase_inventory(purchase=purchase)
+
     return purchase
 
 

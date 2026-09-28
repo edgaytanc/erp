@@ -4,10 +4,42 @@ import uuid
 from decimal import Decimal
 
 from django.conf import settings
+from django.contrib.postgres.fields import ArrayField
 from django.core.exceptions import ValidationError
 from django.db import models
 
 from apps.core.models import Branch, TimeStampedModel
+
+
+class SkinType(models.TextChoices):
+    GRASA = "GRASA", "Piel Grasa"
+    SECA = "SECA", "Piel Seca"
+    MIXTA = "MIXTA", "Piel Mixta"
+    SENS = "SENS", "Piel Sensible"
+    NORM = "NORM", "Piel Normal"
+    TODO = "TODO", "Todo Tipo de Piel"
+    CAB_GRASO = "CAB_GRASO", "Cabello Graso"
+    CAB_SECO = "CAB_SECO", "Cabello Seco"
+
+
+class TargetProblem(models.TextChoices):
+    ACNE = "ACNE", "Acné"
+    MANCHAS = "MANCHAS", "Manchas"
+    ARRUGAS = "ARRUGAS", "Arrugas"
+    CAIDA = "CAIDA", "Caída de Cabello"
+    CASPA = "CASPA", "Caspa"
+    ROJEZ = "ROJEZ", "Rojez / Irritación"
+    DOLOR = "DOLOR", "Dolor Muscular / Articular"
+
+
+class ProductBenefit(models.TextChoices):
+    HIDRAT = "HIDRAT", "Hidratación"
+    SEBOCONT = "SEBOCONT", "Control de Sebo / Matificante"
+    ANTIAGE = "ANTIAGE", "Anti-edad / Firmeza"
+    DESPIGM = "DESPIGM", "Despigmentante / Aclarador"
+    CALMANTE = "CALMANTE", "Calmante / Reparador"
+    PROTSOL = "PROTSOL", "Protección Solar"
+    ESTIMCAP = "ESTIMCAP", "Estimulación Capilar"
 
 
 class Category(TimeStampedModel):
@@ -53,7 +85,7 @@ class Product(TimeStampedModel):
         null=True,
         blank=True,
     )
-    sku = models.CharField(max_length=60, unique=True)
+    sku = models.CharField(max_length=60, unique=True, blank=True)
     barcode = models.CharField(max_length=100, blank=True, null=True, unique=True)
     name = models.CharField(max_length=180)
     description = models.TextField(blank=True, default="")
@@ -62,6 +94,24 @@ class Product(TimeStampedModel):
     min_stock = models.DecimalField(max_digits=12, decimal_places=2, default=Decimal("0.00"))
     is_active = models.BooleanField(default=True)
 
+    skin_type = models.CharField(
+        max_length=20,
+        choices=SkinType.choices,
+        blank=True,
+        default="",
+    )
+    target_problems = ArrayField(
+        models.CharField(max_length=20, choices=TargetProblem.choices),
+        blank=True,
+        default=list,
+    )
+    benefits = ArrayField(
+        models.CharField(max_length=20, choices=ProductBenefit.choices),
+        blank=True,
+        default=list,
+    )
+    keywords = models.TextField(blank=True, default="")
+
     class Meta:
         db_table = "inventory_product"
         ordering = ["name"]
@@ -69,6 +119,7 @@ class Product(TimeStampedModel):
             models.Index(fields=["sku"]),
             models.Index(fields=["name"]),
             models.Index(fields=["category", "is_active"]),
+            models.Index(fields=["skin_type"]),
         ]
 
     def clean(self):
@@ -79,10 +130,42 @@ class Product(TimeStampedModel):
         if self.min_stock < 0:
             raise ValidationError({"min_stock": "El stock mínimo no puede ser negativo."})
 
+    @property
+    def needs_pricing(self) -> bool:
+        """
+        Indica si el producto requiere actualización de precios.
+        Retorna True si el precio de venta o de costo es menor o igual a 0.
+        """
+        sale = self.sale_price if self.sale_price is not None else Decimal("0.00")
+        cost = self.cost_price if self.cost_price is not None else Decimal("0.00")
+        return sale <= Decimal("0.00") or cost <= Decimal("0.00")
+
+    def _generate_sequential_sku(self) -> str:
+        existing_skus = Product.objects.filter(sku__startswith="PROD-").values_list("sku", flat=True)
+        max_num = 0
+        for item in existing_skus:
+            parts = item.split("-", 1)
+            if len(parts) == 2 and parts[1].isdigit():
+                num = int(parts[1])
+                if num > max_num:
+                    max_num = num
+
+        next_num = max_num + 1
+        candidate = f"PROD-{next_num:04d}"
+        while Product.objects.filter(sku=candidate).exists():
+            next_num += 1
+            candidate = f"PROD-{next_num:04d}"
+        return candidate
+
     def save(self, *args, **kwargs):
-        self.sku = (self.sku or "").strip().upper()
         if self.barcode == "":
             self.barcode = None
+
+        if self.sku:
+            self.sku = self.sku.strip().upper()
+        else:
+            self.sku = self._generate_sequential_sku()
+
         super().save(*args, **kwargs)
 
     def __str__(self) -> str:

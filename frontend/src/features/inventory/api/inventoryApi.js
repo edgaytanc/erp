@@ -28,6 +28,11 @@ export async function listProducts(params = {}) {
   return response.data;
 }
 
+export async function listProductsNeedingPricing(params = {}) {
+  const response = await api.get("/inventory/products/needs-pricing/", { params });
+  return response.data;
+}
+
 export async function createProduct(payload) {
   const response = await api.post("/inventory/products/", payload);
   return response.data;

@@ -10,7 +10,7 @@ export async function searchStocks(params = {}) {
   return response.data;
 }
 
-function unwrapResults(data) {
+export function unwrapResults(data) {
   return Array.isArray(data) ? data : data?.results || [];
 }
 
@@ -55,4 +55,18 @@ export async function searchPosProducts({
     .filter((product) => product.stock > 0);
 
   return productsWithStock.slice(0, pageSize);
+}
+
+export async function getRecommendations({ q, branchId, limit = 20 } = {}) {
+  if (!branchId || !q || !q.trim()) {
+    return [];
+  }
+  const response = await api.get("/pos/recommendations/", {
+    params: {
+      q: q.trim(),
+      branch_id: branchId,
+      limit,
+    },
+  });
+  return unwrapResults(response.data);
 }

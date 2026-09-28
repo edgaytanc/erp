@@ -7,6 +7,7 @@ import { CartPanel } from "./CartPanel";
 import { CartTotals } from "./CartTotals";
 import { CashPaymentModal } from "./CashPaymentModal";
 import { PaymentPanel } from "./PaymentPanel";
+import { ProductRecommendationModal } from "./ProductRecommendationModal";
 import { ProductSearch } from "./ProductSearch";
 import { SaleActions } from "./SaleActions";
 import { SaleErrorBanner } from "./SaleErrorBanner";
@@ -22,6 +23,7 @@ export function PosShell({
 }) {
   const [isCancelModalOpen, setIsCancelModalOpen] = useState(false);
   const [isCashPaymentModalOpen, setIsCashPaymentModalOpen] = useState(false);
+  const [isRecommendModalOpen, setIsRecommendModalOpen] = useState(false);
   const [activeTab, setActiveTab] = useState("search");
 
   const ticketRef = useRef(null);
@@ -95,6 +97,8 @@ export function PosShell({
         setIsCashPaymentModalOpen(false);
       } else if (isCancelModalOpen) {
         setIsCancelModalOpen(false);
+      } else if (isRecommendModalOpen) {
+        setIsRecommendModalOpen(false);
       } else {
         actions.clearSale();
       }
@@ -197,6 +201,7 @@ export function PosShell({
             isLoading={isProductSearchLoading}
             onAddProduct={actions.addProduct}
             onHighlight={actions.setSelectedResultIndex}
+            onOpenRecommendation={() => setIsRecommendModalOpen(true)}
             onSearchTermChange={actions.setSearchTerm}
             results={state.searchResults}
             searchTerm={state.searchTerm}
@@ -238,6 +243,12 @@ export function PosShell({
         onConfirm={handleCashPaymentConfirm}
         open={isCashPaymentModalOpen}
         total={state.serverTotals.total}
+      />
+      <ProductRecommendationModal
+        isOpen={isRecommendModalOpen}
+        onClose={() => setIsRecommendModalOpen(false)}
+        branchId={state.branchId}
+        onAddProduct={actions.addProduct}
       />
     </div>
   );

@@ -8,7 +8,16 @@ from rest_framework import status
 from rest_framework.test import APITestCase
 
 from apps.core.models import Branch, Company
-from apps.inventory.models import Category, Product, ReferenceType, Stock, StockMovement
+from apps.inventory.models import (
+    Category,
+    Product,
+    ProductBenefit,
+    ReferenceType,
+    SkinType,
+    Stock,
+    StockMovement,
+    TargetProblem,
+)
 from apps.inventory.services import (
     apply_inventory_movement,
     register_adjustment,
@@ -69,6 +78,47 @@ class InventoryAPITestCase(APITestCase):
         self.assertEqual(response.status_code, status.HTTP_200_OK)
         self.assertEqual(response.data["count"], 1)
         self.assertEqual(response.data["results"][0]["sku"], "FRIJOL-001")
+
+    def test_product_list_supports_name_search_icontains(self):
+        url = reverse("inventory-products-list")
+        response = self.client.get(url, {"name": "rroz"})
+
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.assertGreaterEqual(response.data["count"], 1)
+        self.assertTrue(any(p["name"] == "Arroz" for p in response.data["results"]))
+
+    def test_product_auto_generates_sequential_sku(self):
+        prod1 = Product.objects.create(
+            category=self.category,
+            name="Producto Auto 1",
+            sale_price=Decimal("15.00"),
+        )
+        self.assertTrue(prod1.sku.startswith("PROD-"))
+        num1 = int(prod1.sku.split("-")[1])
+
+        prod2 = Product.objects.create(
+            category=self.category,
+            name="Producto Auto 2",
+            sale_price=Decimal("20.00"),
+        )
+        self.assertEqual(prod2.sku, f"PROD-{num1 + 1:04d}")
+
+        # Explicit SKU is preserved
+        prod3 = Product.objects.create(
+            category=self.category,
+            sku="CUSTOM-999",
+            name="Producto Custom",
+            sale_price=Decimal("25.00"),
+        )
+        self.assertEqual(prod3.sku, "CUSTOM-999")
+
+        # Next auto-generated product continues the PROD sequence
+        prod4 = Product.objects.create(
+            category=self.category,
+            name="Producto Auto 3",
+            sale_price=Decimal("30.00"),
+        )
+        self.assertEqual(prod4.sku, f"PROD-{num1 + 2:04d}")
 
     def test_product_can_be_updated(self):
         new_category = Category.objects.create(name="Bebidas")
@@ -255,6 +305,107 @@ class InventoryAPITestCase(APITestCase):
         response = self.client.post(url, {"file": csv_file}, format="multipart")
         self.assertEqual(response.status_code, status.HTTP_403_FORBIDDEN)
 
+    def test_needs_pricing_endpoint_returns_products_requiring_pricing(self):
+        Product.objects.create(
+            category=self.category,
+            sku="PENDING-01",
+            name="Producto pendiente de precio",
+            sale_price=Decimal("0.00"),
+            cost_price=Decimal("12.00"),
+        )
+        url = reverse("inventory-products-needs-pricing")
+        response = self.client.get(url)
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        results = response.data.get("results", response.data)
+        skus = [p["sku"] for p in results]
+        self.assertIn("PENDING-01", skus)
+        self.assertNotIn("ARROZ-001", skus)
+
+    def test_product_price_update_resolves_needs_pricing(self):
+        prod = Product.objects.create(
+            category=self.category,
+            sku="UPDATE-PRICING-01",
+            name="Producto a actualizar",
+            sale_price=Decimal("0.00"),
+            cost_price=Decimal("0.00"),
+        )
+        self.assertTrue(prod.needs_pricing)
+
+        patch_url = reverse("inventory-products-detail", args=[prod.id])
+        update_response = self.client.patch(
+            patch_url,
+            {"sale_price": "25.00", "cost_price": "15.00"},
+            format="json",
+        )
+        self.assertEqual(update_response.status_code, status.HTTP_200_OK)
+        self.assertFalse(update_response.data["needs_pricing"])
+
+        prod.refresh_from_db()
+        self.assertEqual(prod.sale_price, Decimal("25.00"))
+        self.assertEqual(prod.cost_price, Decimal("15.00"))
+        self.assertFalse(prod.needs_pricing)
+
+    def test_pos_recommendation_requires_branch(self):
+        self.client.force_authenticate(user=self.admin_user)
+        url = reverse("pos-recommendations")
+        response = self.client.get(url, {"q": "crema"})
+        self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
+
+    def test_pos_recommendation_empty_query(self):
+        self.client.force_authenticate(user=self.admin_user)
+        url = reverse("pos-recommendations")
+        response = self.client.get(url, {"q": "", "branch_id": str(self.branch.id)})
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.assertEqual(response.data, [])
+
+    def test_pos_recommendation_full_text_and_stock(self):
+        self.client.force_authenticate(user=self.admin_user)
+        p1 = Product.objects.create(
+            category=self.category,
+            sku="SERUM-001",
+            name="Serum Facial Hidratante de Ácido Hialurónico",
+            sale_price=Decimal("150.00"),
+            skin_type=SkinType.SECA,
+            target_problems=[TargetProblem.ARRUGAS],
+            benefits=[ProductBenefit.HIDRAT, ProductBenefit.ANTIAGE],
+            keywords="hidratacion profunda arrugas",
+            description="Serum para piel seca y líneas de expresión",
+        )
+        p2 = Product.objects.create(
+            category=self.category,
+            sku="GEL-001",
+            name="Gel Limpiador Purificante Seborregulador",
+            sale_price=Decimal("120.00"),
+            skin_type=SkinType.GRASA,
+            target_problems=[TargetProblem.ACNE],
+            benefits=[ProductBenefit.SEBOCONT],
+            keywords="grasa espinillas acne",
+            description="Gel limpiador para piel grasa con tendencia a acné",
+        )
+        p_no_stock = Product.objects.create(
+            category=self.category,
+            sku="CREMA-001",
+            name="Crema Anti-Acné Matificante",
+            sale_price=Decimal("110.00"),
+            skin_type=SkinType.GRASA,
+            target_problems=[TargetProblem.ACNE],
+            benefits=[ProductBenefit.SEBOCONT],
+            keywords="acne matificante",
+        )
+        Stock.objects.create(branch=self.branch, product=p1, qty_on_hand=Decimal("10.00"))
+        Stock.objects.create(branch=self.branch, product=p2, qty_on_hand=Decimal("5.00"))
+        Stock.objects.create(branch=self.branch, product=p_no_stock, qty_on_hand=Decimal("0.00"))
+
+        url = reverse("pos-recommendations")
+        response = self.client.get(url, {"q": "piel seca arrugas hidratacion", "branch_id": str(self.branch.id)})
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        results = response.data
+        self.assertTrue(len(results) >= 1)
+        self.assertEqual(results[0]["id"], str(p1.id))
+        self.assertEqual(results[0]["name"], p1.name)
+        self.assertEqual(results[0]["main_benefit"], "Hidratación")
+        self.assertNotIn(str(p_no_stock.id), [r["id"] for r in results])
+
 
 class InventoryServiceIntegrationTestCase(TestCase):
     def setUp(self):
@@ -379,3 +530,32 @@ class InventoryServiceIntegrationTestCase(TestCase):
         stock = Stock.objects.get(branch=self.branch, product=self.product)
         self.assertEqual(movement.type, StockMovement.Type.OUT)
         self.assertEqual(stock.qty_on_hand, Decimal("5.00"))
+
+    def test_product_needs_pricing_property(self):
+        p_no_sale = Product.objects.create(
+            category=self.category,
+            sku="NO-SALE-01",
+            name="Sin precio venta",
+            sale_price=Decimal("0.00"),
+            cost_price=Decimal("5.00"),
+        )
+        self.assertTrue(p_no_sale.needs_pricing)
+
+        p_no_cost = Product.objects.create(
+            category=self.category,
+            sku="NO-COST-01",
+            name="Sin precio costo",
+            sale_price=Decimal("15.00"),
+            cost_price=Decimal("0.00"),
+        )
+        self.assertTrue(p_no_cost.needs_pricing)
+
+        p_complete = Product.objects.create(
+            category=self.category,
+            sku="COMPLETE-01",
+            name="Con precios completos",
+            sale_price=Decimal("20.00"),
+            cost_price=Decimal("10.00"),
+        )
+        self.assertFalse(p_complete.needs_pricing)
+
