@@ -3,6 +3,7 @@ import { Outlet } from "react-router-dom";
 
 import { AppHeader } from "../components/layout/AppHeader";
 import { AppSidebar } from "../components/layout/AppSidebar";
+import { ErrorBoundary } from "../components/feedback/ErrorBoundary";
 import { PosEntryCard } from "../features/pos/components/PosEntryCard";
 
 export function AppLayout() {
@@ -30,7 +31,9 @@ export function AppLayout() {
         />
         <main className="app-main">
           {/* <PosEntryCard /> */}
-          <Outlet />
+          <ErrorBoundary>
+            <Outlet />
+          </ErrorBoundary>
         </main>
       </div>
     </div>
