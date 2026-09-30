@@ -264,15 +264,20 @@
 @media (max-width: 1120px) {
   .inventory-grid,
   .categories-grid {
+    grid-template-columns: 280px minmax(0, 1fr);
+  }
+}
+
+@media (max-width: 768px) {
+  .inventory-grid,
+  .categories-grid {
     grid-template-columns: 1fr;
   }
 
   .inventory-panel--form {
     position: static;
   }
-}
 
-@media (max-width: 760px) {
   .inventory-product-row {
     grid-template-columns: 1fr;
   }

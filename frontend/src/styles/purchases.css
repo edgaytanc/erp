@@ -287,11 +287,15 @@
 
 @media (max-width: 1180px) {
   .purchases-grid {
-    grid-template-columns: 1fr;
+    grid-template-columns: 280px minmax(0, 1fr);
   }
 }
 
-@media (max-width: 780px) {
+@media (max-width: 768px) {
+  .purchases-grid {
+    grid-template-columns: 1fr;
+  }
+
   .purchases-form-row,
   .purchase-item-form,
   .purchase-actions {

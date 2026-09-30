@@ -39,7 +39,7 @@
 
 .admin-config-grid {
   display: grid;
-  grid-template-columns: minmax(0, 1.2fr) minmax(320px, 0.8fr);
+  grid-template-columns: 360px minmax(0, 1fr);
   gap: 1rem;
   align-items: start;
 }
@@ -220,7 +220,7 @@
 /* Responsive Overrides & Media Queries */
 @media (max-width: 1180px) {
   .admin-config-grid {
-    grid-template-columns: 1fr;
+    grid-template-columns: 280px minmax(0, 1fr);
   }
 
   .admin-form-row--three {
@@ -233,6 +233,10 @@
 }
 
 @media (max-width: 768px) {
+  .admin-config-grid {
+    grid-template-columns: 1fr;
+  }
+
   .admin-form-row,
   .admin-form-row--three,
   .admin-form-row--four,
