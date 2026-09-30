@@ -4,8 +4,8 @@ export function ReportTable({ activeReport, reportData, isLoading }) {
   const items = reportData?.items || [];
 
   return (
-    <section className="reports-panel reports-panel--detail">
-      <div className="reports-panel__header">
+    <section className="global-panel">
+      <div className="global-panel-header">
         <h3>Detalle</h3>
         <span>{isLoading ? "Cargando..." : `${items.length} filas`}</span>
       </div>

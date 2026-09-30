@@ -11,8 +11,8 @@ export function ConfigGeneral({
   selectedCompany,
 }) {
   return (
-    <section className="admin-panel">
-      <div className="admin-panel__header">
+    <section className="global-panel">
+      <div className="global-panel-header">
         <h3>Empresa y recibos</h3>
         <span>
           {isLoading ? "Cargando..." : selectedCompany ? "Editando" : "Nueva"}

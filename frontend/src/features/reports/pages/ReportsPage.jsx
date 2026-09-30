@@ -594,7 +594,7 @@ export function ReportsPage() {
 
   return (
     <div className="reports-page">
-      <section className="reports-toolbar">
+      <section className="global-toolbar">
         <div>
           <h2>Reportes</h2>
           <p>{activeGroup.description}</p>
@@ -670,7 +670,9 @@ export function ReportsPage() {
 
         {/* Right Column: Content with Current Report, Summary, and Details Table */}
         <div className="reports-grid__content">
-          {error ? <div className="reports-alert">{error}</div> : null}
+          {error ? (
+            <div className="global-alert global-alert--error">{error}</div>
+          ) : null}
 
           <section className="reports-current">
             <div>

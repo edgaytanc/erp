@@ -3,31 +3,7 @@
   gap: 1rem;
 }
 
-.admin-config-toolbar,
-.admin-panel {
-  border: 1px solid #dfe8f4;
-  border-radius: 0.5rem;
-  background: #ffffff;
-  box-shadow: 0 8px 20px rgba(15, 23, 42, 0.05);
-}
 
-.admin-config-toolbar {
-  display: flex;
-  justify-content: space-between;
-  align-items: end;
-  gap: 1rem;
-  padding: 1rem;
-}
-
-.admin-config-toolbar h2,
-.admin-panel__header h3 {
-  margin: 0;
-}
-
-.admin-config-toolbar p {
-  margin: 0.25rem 0 0;
-  color: #607089;
-}
 
 .admin-company-select,
 .admin-form label {
@@ -59,23 +35,7 @@
   box-shadow: 0 0 0 3px rgba(37, 99, 235, 0.12);
 }
 
-.admin-alert {
-  padding: 0.85rem 1rem;
-  border-radius: 0.5rem;
-  font-weight: 700;
-}
 
-.admin-alert--error {
-  border: 1px solid #fecaca;
-  background: #fef2f2;
-  color: #991b1b;
-}
-
-.admin-alert--success {
-  border: 1px solid #bbf7d0;
-  background: #f0fdf4;
-  color: #166534;
-}
 
 .admin-config-grid {
   display: grid;
@@ -88,17 +48,7 @@
   grid-column: 1 / -1;
 }
 
-.admin-panel__header {
-  display: flex;
-  justify-content: space-between;
-  gap: 1rem;
-  padding: 1rem;
-  border-bottom: 1px solid #edf2f7;
-}
 
-.admin-panel__header span {
-  color: #64748b;
-}
 
 .admin-form {
   display: grid;
@@ -283,7 +233,6 @@
 }
 
 @media (max-width: 768px) {
-  .admin-config-toolbar,
   .admin-form-row,
   .admin-form-row--three,
   .admin-form-row--four,
@@ -291,11 +240,6 @@
   .admin-user-row,
   .admin-actions-row {
     grid-template-columns: 1fr;
-    align-items: stretch;
-  }
-
-  .admin-config-toolbar {
-    flex-direction: column;
     align-items: stretch;
   }
 

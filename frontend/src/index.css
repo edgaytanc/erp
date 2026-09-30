@@ -477,6 +477,72 @@ code {
   border: 1px solid #fecaca;
 }
 
+/* ==========================================================================
+   Global UI Components & Utility Classes
+   ========================================================================== */
+.global-toolbar,
+.global-panel {
+  border: 1px solid #dfe8f4;
+  border-radius: 0.5rem;
+  background: #ffffff;
+  box-shadow: 0 8px 20px rgba(15, 23, 42, 0.05);
+}
+
+.global-toolbar {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-end;
+  gap: 1rem;
+  padding: 1rem;
+}
+
+.global-toolbar h2 {
+  margin: 0;
+}
+
+.global-toolbar p {
+  margin: 0.25rem 0 0;
+  color: #607089;
+}
+
+.global-panel-header,
+.global-panel__header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 1rem;
+  padding: 1rem;
+  border-bottom: 1px solid #edf2f7;
+}
+
+.global-panel-header h3,
+.global-panel__header h3 {
+  margin: 0;
+}
+
+.global-panel-header span,
+.global-panel__header span {
+  color: #64748b;
+}
+
+.global-alert {
+  padding: 0.85rem 1rem;
+  border-radius: 0.5rem;
+  font-weight: 700;
+}
+
+.global-alert--error {
+  border: 1px solid #fecaca;
+  background: #fef2f2;
+  color: #991b1b;
+}
+
+.global-alert--success {
+  border: 1px solid #bbf7d0;
+  background: #f0fdf4;
+  color: #166534;
+}
+
 .loading-screen {
   display: grid;
   place-items: center;
@@ -1217,3 +1283,25 @@ code {
     grid-template-columns: 1fr;
   }
 }
+
+@media (max-width: 768px) {
+  .global-toolbar {
+    flex-direction: column;
+    align-items: stretch;
+    gap: 1rem;
+  }
+}
+
+@media print {
+  .global-toolbar,
+  .global-alert {
+    display: none;
+  }
+
+  .global-panel {
+    break-inside: avoid;
+    box-shadow: none;
+    margin-top: 0.75rem;
+  }
+}
+

@@ -15,8 +15,8 @@ export function ConfigBranches({
 }) {
   return (
     <div className="admin-config-grid">
-      <section className="admin-panel">
-        <div className="admin-panel__header">
+      <section className="global-panel">
+        <div className="global-panel-header">
           <h3>{editingBranchId ? "Editar Sucursal" : "Nueva Sucursal"}</h3>
           <span>Formulario</span>
         </div>
@@ -70,8 +70,8 @@ export function ConfigBranches({
         </form>
       </section>
 
-      <section className="admin-panel">
-        <div className="admin-panel__header">
+      <section className="global-panel">
+        <div className="global-panel-header">
           <h3>Listado de Sucursales</h3>
           <span>{filteredBranches.length}</span>
         </div>

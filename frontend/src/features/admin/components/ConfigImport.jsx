@@ -11,8 +11,8 @@ export function ConfigImport({
   handleDownloadSample,
 }) {
   return (
-    <section className="admin-panel">
-      <div className="admin-panel__header">
+    <section className="global-panel">
+      <div className="global-panel-header">
         <h3>Carga masiva de productos</h3>
         <span>CSV</span>
       </div>
@@ -43,7 +43,7 @@ export function ConfigImport({
 
       {csvSuccess && (
         <div
-          className="admin-alert admin-alert--success"
+          className="global-alert global-alert--success"
           style={{
             margin: "0 1rem 1rem",
             fontSize: "0.85rem",
@@ -55,7 +55,7 @@ export function ConfigImport({
 
       {csvErrors.length > 0 && (
         <div
-          className="admin-alert admin-alert--error"
+          className="global-alert global-alert--error"
           style={{
             margin: "0 1rem 1rem",
             maxHeight: "250px",
