@@ -11,7 +11,7 @@ from rest_framework.views import APIView
 
 from apps.accounts.permissions import IsAdminRole
 from apps.core.models import Branch
-from apps.inventory.models import Stock, StockMovement
+from apps.inventory.models import Product, Stock, StockMovement
 from apps.purchases.models import Purchase, PurchaseItem, PurchaseStatus
 from apps.sales.models import CashRegisterSession, CashRegisterStatus, Sale, SaleItem, SaleStatus
 from apps.sales.services import cash_sales_total_for_session, expected_cash_for_session
@@ -724,6 +724,65 @@ class PurchasesVsSalesReportView(AdminReportView):
                     "difference": self.money(
                         Decimal(total_sales or ZERO) - Decimal(total_purchases or ZERO)
                     ),
+                },
+                "items": items,
+            }
+        )
+
+
+class GeneralProductsReportView(AdminReportView):
+    def get(self, request):
+        date_from, date_to = self.get_date_range(request)
+        branch_id = request.query_params.get("branch")
+
+        qs = Product.objects.select_related("category").all()
+
+        # Si se envía branch, el qty_on_hand se calcula sumando solo el stock de esa sucursal.
+        # Si no se envía, es la suma global.
+        stock_filter = Q()
+        if branch_id:
+            stock_filter = Q(stocks__branch_id=branch_id)
+
+        qs = qs.annotate(
+            calculated_qty_on_hand=Coalesce(
+                Sum("stocks__qty_on_hand", filter=stock_filter),
+                Value(ZERO),
+                output_field=DecimalField(max_digits=14, decimal_places=2),
+            )
+        )
+
+        # Asegurar que se devuelven todos los productos (con o sin stock).
+        # El stock actual refleja las existencias al momento de la consulta.
+        items = []
+        total_stock = Decimal("0.00")
+
+        for product in qs.order_by("category__name", "name", "sku"):
+            qty = product.calculated_qty_on_hand or Decimal("0.00")
+            total_stock += qty
+            items.append(
+                {
+                    "sku": product.sku,
+                    "category_name": product.category.name if product.category else "Sin categoría",
+                    "name": product.name,
+                    "sale_price": self.money(product.sale_price),
+                    "cost_price": self.money(product.cost_price),
+                    "qty_on_hand": self.money(qty),
+                    "min_stock": self.money(product.min_stock),
+                }
+            )
+
+        return Response(
+            {
+                "filters": {
+                    "date_from": date_from,
+                    "date_to": date_to,
+                    "branch": branch_id,
+                },
+                "scope": self.branch_scope(request),
+                "generated_at": timezone.now().isoformat(),
+                "summary": {
+                    "total_products": len(items),
+                    "total_stock": self.money(total_stock),
                 },
                 "items": items,
             }

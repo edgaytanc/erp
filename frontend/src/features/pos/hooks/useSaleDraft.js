@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useRef } from "react";
 
 import { createSale, updateSale } from "../api/salesApi";
+import { SYNC_STATUS } from "../constants/posConstants";
 import { POS_ACTIONS } from "../state/posActions";
 import { getPosErrorMessage } from "../utils/posErrors";
 import { mapSalePayload } from "../utils/mapSalePayload";
@@ -21,7 +22,10 @@ export function useSaleDraft({ dispatch, state }) {
       return null;
     }
 
-    dispatch({ type: POS_ACTIONS.SET_SYNC_STATUS, payload: "syncing" });
+    dispatch({
+      type: POS_ACTIONS.SET_SYNC_STATUS,
+      payload: SYNC_STATUS.SYNCING,
+    });
 
     try {
       const payload = mapSalePayload({
@@ -34,7 +38,10 @@ export function useSaleDraft({ dispatch, state }) {
         : await createSale(payload);
 
       dispatch({ type: POS_ACTIONS.SET_DRAFT_SALE, payload: sale });
-      dispatch({ type: POS_ACTIONS.SET_SYNC_STATUS, payload: "idle" });
+      dispatch({
+        type: POS_ACTIONS.SET_SYNC_STATUS,
+        payload: SYNC_STATUS.IDLE,
+      });
       dispatch({ type: POS_ACTIONS.CLEAR_ERROR });
       return sale;
     } catch (error) {

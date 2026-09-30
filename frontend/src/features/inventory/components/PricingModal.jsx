@@ -121,7 +121,7 @@ export function PricingModal({ product, isOpen, onClose, onSuccess }) {
 
         {error && (
           <div
-            className="inventory-alert inventory-alert--error"
+            className="global-alert global-alert--error"
             style={{ padding: "0.6rem 0.75rem", fontSize: "0.85rem" }}
           >
             {error}

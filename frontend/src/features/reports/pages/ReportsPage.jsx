@@ -6,6 +6,7 @@ import {
   getCashRegisterReport,
   getCriticalStockReport,
   getDailyUtilityReport,
+  getGeneralProductsReport,
   getInventoryByBranchReport,
   getInventoryMovementsReport,
   getInventoryValueReport,
@@ -239,6 +240,25 @@ const REPORT_GROUPS = [
     description:
       "Stock crítico, valor, distribución por sucursal y movimientos.",
     reports: [
+      {
+        id: "general-products",
+        label: "Reporte general de Productos",
+        fetcher: getGeneralProductsReport,
+        usesDates: false,
+        summary: [
+          ["Total Productos", "total_products", "number"],
+          ["Stock Total", "total_stock", "number"],
+        ],
+        columns: [
+          ["SKU", "sku"],
+          ["Categoría", "category_name"],
+          ["Nombre", "name"],
+          ["Precio Venta", "sale_price", "money"],
+          ["Precio Costo", "cost_price", "money"],
+          ["Stock", "qty_on_hand", "number"],
+          ["Mínimo Stock", "min_stock", "number"],
+        ],
+      },
       {
         id: "critical-stock",
         label: "Stock Crítico",
@@ -574,7 +594,7 @@ export function ReportsPage() {
 
   return (
     <div className="reports-page">
-      <section className="reports-toolbar">
+      <section className="global-toolbar">
         <div>
           <h2>Reportes</h2>
           <p>{activeGroup.description}</p>
@@ -650,7 +670,9 @@ export function ReportsPage() {
 
         {/* Right Column: Content with Current Report, Summary, and Details Table */}
         <div className="reports-grid__content">
-          {error ? <div className="reports-alert">{error}</div> : null}
+          {error ? (
+            <div className="global-alert global-alert--error">{error}</div>
+          ) : null}
 
           <section className="reports-current">
             <div>

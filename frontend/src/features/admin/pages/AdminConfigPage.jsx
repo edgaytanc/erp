@@ -472,7 +472,7 @@ export function AdminConfigPage() {
 
   return (
     <div className="admin-config-page">
-      <section className="admin-config-toolbar">
+      <section className="global-toolbar">
         <div>
           <h2>Configuración</h2>
           <p>Empresa, sucursales, usuarios y roles del ERP.</p>
@@ -498,10 +498,10 @@ export function AdminConfigPage() {
       </section>
 
       {error ? (
-        <div className="admin-alert admin-alert--error">{error}</div>
+        <div className="global-alert global-alert--error">{error}</div>
       ) : null}
       {success ? (
-        <div className="admin-alert admin-alert--success">{success}</div>
+        <div className="global-alert global-alert--success">{success}</div>
       ) : null}
 
       <nav className="admin-tabs-nav" aria-label="Secciones de configuración">

@@ -57,7 +57,7 @@ export function PricingAlertSection({ onProductUpdated, initialProducts }) {
     <div style={{ marginBottom: "1.5rem" }}>
       {successMessage && (
         <div
-          className="inventory-alert inventory-alert--success"
+          className="global-alert global-alert--success"
           style={{ marginBottom: "0.75rem", fontSize: "0.9rem" }}
         >
           ✓ {successMessage}
@@ -66,7 +66,7 @@ export function PricingAlertSection({ onProductUpdated, initialProducts }) {
 
       {alerts.length > 0 && (
         <section
-          className="inventory-alert inventory-alert--error"
+          className="global-alert global-alert--error"
           aria-label="Alertas de precios de productos"
           style={{ display: "grid", gap: "0.85rem" }}
         >

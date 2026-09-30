@@ -1,3 +1,4 @@
+import { SALE_STATUS, SYNC_STATUS } from "../constants/posConstants";
 import { POS_ACTIONS } from "./posActions";
 import { posInitialState } from "./posInitialState";
 
@@ -149,12 +150,14 @@ export function posReducer(state, action) {
             state.serverTotals.total,
         },
         syncStatus:
-          action.payload?.status === "VOID" ? "cancelled" : "confirmed",
+          action.payload?.status === SALE_STATUS.VOID
+            ? SYNC_STATUS.CANCELLED
+            : SYNC_STATUS.CONFIRMED,
       };
     case POS_ACTIONS.SET_TICKET:
       return { ...state, ticketData: action.payload };
     case POS_ACTIONS.SET_ERROR:
-      return { ...state, lastError: action.payload, syncStatus: "error" };
+      return { ...state, lastError: action.payload, syncStatus: SYNC_STATUS.ERROR };
     case POS_ACTIONS.CLEAR_ERROR:
       return { ...state, lastError: null };
     case POS_ACTIONS.RESET:

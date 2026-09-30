@@ -18,10 +18,10 @@ export function ConfigUsers({
   return (
     <div className="admin-users-container">
       <section
-        className="admin-panel admin-panel--users"
+        className="global-panel admin-panel--users"
         style={{ marginBottom: "1rem" }}
       >
-        <div className="admin-panel__header">
+        <div className="global-panel-header">
           <h3>{editingUserId ? "Editar Usuario" : "Nuevo Usuario"}</h3>
           <span>Formulario</span>
         </div>
@@ -141,8 +141,8 @@ export function ConfigUsers({
         </form>
       </section>
 
-      <section className="admin-panel">
-        <div className="admin-panel__header">
+      <section className="global-panel">
+        <div className="global-panel-header">
           <h3>Listado de Usuarios</h3>
           <span>{users.length}</span>
         </div>

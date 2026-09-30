@@ -2,6 +2,7 @@ import { useCallback } from "react";
 
 import { confirmSale as confirmSaleRequest, voidSale } from "../api/salesApi";
 import { getSaleTicket } from "../api/ticketApi";
+import { PAYMENT_METHODS, SYNC_STATUS } from "../constants/posConstants";
 import { POS_ACTIONS } from "../state/posActions";
 import { getPosErrorMessage } from "../utils/posErrors";
 
@@ -32,7 +33,10 @@ export function useSaleActions({ state, dispatch, syncDraftNow }) {
         return;
       }
 
-      dispatch({ type: POS_ACTIONS.SET_SYNC_STATUS, payload: "syncing" });
+      dispatch({
+        type: POS_ACTIONS.SET_SYNC_STATUS,
+        payload: SYNC_STATUS.SYNCING,
+      });
 
       try {
         const draftSale = await syncDraftNow();
@@ -43,7 +47,7 @@ export function useSaleActions({ state, dispatch, syncDraftNow }) {
         }
 
         const confirmPayload =
-          state.paymentMethod === "CASH"
+          state.paymentMethod === PAYMENT_METHODS.CASH
             ? { cash_received: paymentDetails.cashReceived }
             : {};
         const confirmedSale = await confirmSaleRequest(saleId, confirmPayload);
@@ -86,7 +90,10 @@ export function useSaleActions({ state, dispatch, syncDraftNow }) {
         });
         return;
       }
-      dispatch({ type: POS_ACTIONS.SET_SYNC_STATUS, payload: "syncing" });
+      dispatch({
+        type: POS_ACTIONS.SET_SYNC_STATUS,
+        payload: SYNC_STATUS.SYNCING,
+      });
 
       try {
         const cancelledSale = await voidSale(state.lastConfirmedSale.id, {
@@ -98,7 +105,10 @@ export function useSaleActions({ state, dispatch, syncDraftNow }) {
           type: POS_ACTIONS.SET_CONFIRMED_SALE,
           payload: cancelledSale,
         });
-        dispatch({ type: POS_ACTIONS.SET_SYNC_STATUS, payload: "cancelled" });
+        dispatch({
+          type: POS_ACTIONS.SET_SYNC_STATUS,
+          payload: SYNC_STATUS.CANCELLED,
+        });
         dispatch({ type: POS_ACTIONS.SET_TICKET, payload: ticket });
         dispatch({ type: POS_ACTIONS.CLEAR_ERROR });
       } catch (error) {

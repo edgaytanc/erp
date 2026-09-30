@@ -839,7 +839,7 @@ export function PurchasesPage() {
   return (
     <div className="purchases-page">
       <style>{modalStyles}</style>
-      <section className="purchases-toolbar">
+      <section className="global-toolbar">
         <div>
           <h2>Compras y entradas</h2>
           <p>Carga stock inicial para la sucursal asignada a tu usuario.</p>
@@ -858,10 +858,10 @@ export function PurchasesPage() {
       </section>
 
       {error ? (
-        <div className="purchases-alert purchases-alert--error">{error}</div>
+        <div className="global-alert global-alert--error">{error}</div>
       ) : null}
       {success ? (
-        <div className="purchases-alert purchases-alert--success">
+        <div className="global-alert global-alert--success">
           {success}
         </div>
       ) : null}
@@ -910,8 +910,8 @@ export function PurchasesPage() {
       {activeTab === "new_purchase" && (
         <div className="purchases-grid">
           <div style={{ display: "grid", gap: "1rem" }}>
-            <section className="purchases-panel">
-              <div className="purchases-panel__header">
+            <section className="global-panel">
+              <div className="global-panel-header">
                 <h3>Proveedor</h3>
                 <div
                   style={{
@@ -996,8 +996,8 @@ export function PurchasesPage() {
             </section>
           </div>
 
-          <section className="purchases-panel purchases-panel--entry">
-            <div className="purchases-panel__header">
+          <section className="global-panel purchases-panel--entry">
+            <div className="global-panel-header">
               <h3>Entrada de inventario</h3>
               <span>
                 {isLoading ? "Cargando..." : `${products.length} productos`}
@@ -1277,8 +1277,8 @@ export function PurchasesPage() {
 
       {activeTab === "history" && (
         <div className="purchases-grid">
-          <section className="purchases-panel">
-            <div className="purchases-panel__header">
+          <section className="global-panel">
+            <div className="global-panel-header">
               <h3>Órdenes Pendientes (DRAFT)</h3>
               <span>{draftPurchases.length}</span>
             </div>
@@ -1353,8 +1353,8 @@ export function PurchasesPage() {
             </div>
           </section>
 
-          <section className="purchases-panel">
-            <div className="purchases-panel__header">
+          <section className="global-panel">
+            <div className="global-panel-header">
               <h3>Compras recientes</h3>
               <span>{recentPurchases.length}</span>
             </div>
@@ -1409,7 +1409,7 @@ export function PurchasesPage() {
             >
               {modalError && (
                 <div
-                  className="purchases-alert purchases-alert--error"
+                  className="global-alert global-alert--error"
                   style={{ marginBottom: "1rem" }}
                 >
                   {modalError}
@@ -1417,7 +1417,7 @@ export function PurchasesPage() {
               )}
               {modalSuccess && (
                 <div
-                  className="purchases-alert purchases-alert--success"
+                  className="global-alert global-alert--success"
                   style={{ marginBottom: "1rem" }}
                 >
                   {modalSuccess}

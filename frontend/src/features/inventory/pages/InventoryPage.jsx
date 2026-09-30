@@ -397,7 +397,7 @@ export function InventoryPage() {
 
   return (
     <div className="inventory-page">
-      <section className="inventory-toolbar">
+      <section className="global-toolbar">
         <div>
           <h2>Inventario</h2>
           <p>Productos reales para compras, stock y ventas POS.</p>
@@ -454,7 +454,7 @@ export function InventoryPage() {
       {/* General error/success alerts */}
       {error ? (
         <div
-          className="inventory-alert inventory-alert--error"
+          className="global-alert global-alert--error"
           style={{ marginBottom: "1rem" }}
         >
           {error}
@@ -462,7 +462,7 @@ export function InventoryPage() {
       ) : null}
       {success ? (
         <div
-          className="inventory-alert inventory-alert--success"
+          className="global-alert global-alert--success"
           style={{ marginBottom: "1rem" }}
         >
           {success}
@@ -478,8 +478,8 @@ export function InventoryPage() {
               className="inventory-grid"
               style={{ gridTemplateColumns: "1fr" }}
             >
-              <section className="inventory-panel">
-                <div className="inventory-panel__header">
+              <section className="global-panel">
+                <div className="global-panel-header">
                   <h3>
                     {isEditingProduct ? "Editar producto" : "Nuevo producto"}
                   </h3>
@@ -783,8 +783,8 @@ export function InventoryPage() {
                 </Button>
               </div>
 
-              <section className="inventory-panel">
-                <div className="inventory-panel__header">
+              <section className="global-panel">
+                <div className="global-panel-header">
                   <h3>Productos</h3>
                   <span>
                     {isLoading ? "Cargando..." : `${productCount} registros`}
@@ -859,20 +859,20 @@ export function InventoryPage() {
       {activeTab === "categories" && (
         <div style={{ display: "grid", gap: "1rem" }}>
           {categoryError && (
-            <div className="inventory-alert inventory-alert--error">
+            <div className="global-alert global-alert--error">
               {categoryError}
             </div>
           )}
           {categorySuccess && (
-            <div className="inventory-alert inventory-alert--success">
+            <div className="global-alert global-alert--success">
               {categorySuccess}
             </div>
           )}
 
           <div className="categories-grid">
             {/* Left side: Category List */}
-            <section className="inventory-panel">
-              <div className="inventory-panel__header">
+            <section className="global-panel">
+              <div className="global-panel-header">
                 <h3>Listado de Categorías</h3>
                 <span>{categories.length} registros</span>
               </div>
@@ -960,8 +960,8 @@ export function InventoryPage() {
             </section>
 
             {/* Right side: Create/Edit Form */}
-            <section className="inventory-panel">
-              <div className="inventory-panel__header">
+            <section className="global-panel">
+              <div className="global-panel-header">
                 <h3>
                   {editingCategoryId
                     ? "Modificar Categoría"
@@ -1071,14 +1071,14 @@ export function InventoryPage() {
       {activeTab === "stock" && (
         <div style={{ display: "grid", gap: "2rem" }}>
           {stockError && (
-            <div className="inventory-alert inventory-alert--error">
+            <div className="global-alert global-alert--error">
               {stockError}
             </div>
           )}
 
           {/* Stocks Panel */}
-          <section className="inventory-panel">
-            <div className="inventory-panel__header">
+          <section className="global-panel">
+            <div className="global-panel-header">
               <div>
                 <h3 style={{ margin: 0 }}>Stock en Almacén</h3>
                 <p
@@ -1164,8 +1164,8 @@ export function InventoryPage() {
           </section>
 
           {/* Movements Panel */}
-          <section className="inventory-panel">
-            <div className="inventory-panel__header">
+          <section className="global-panel">
+            <div className="global-panel-header">
               <div>
                 <h3 style={{ margin: 0 }}>Historial de Movimientos</h3>
                 <p
