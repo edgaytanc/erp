@@ -73,7 +73,7 @@ code {
 
 .app-shell {
   display: grid;
-  grid-template-columns: 280px 1fr;
+  grid-template-columns: 250px 1fr;
   min-height: 100vh;
   transition: grid-template-columns 0.3s cubic-bezier(0.4, 0, 0.2, 1);
 }
@@ -209,7 +209,7 @@ code {
   color: #ffffff;
 }
 
-@media (min-width: 981px) {
+@media (min-width: 1025px) {
   .sidebar.sidebar--collapsed {
     padding: 1.5rem 0.75rem;
     align-items: center;
@@ -340,6 +340,10 @@ code {
 }
 
 .btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 44px;
   border: none;
   border-radius: 0.9rem;
   padding: 0.8rem 1rem;
@@ -381,6 +385,7 @@ code {
 
 .field__input {
   width: 100%;
+  min-height: 44px;
   border: 1px solid #cdd8ea;
   border-radius: 0.85rem;
   background: #fff;
@@ -638,6 +643,10 @@ code {
 }
 
 .dashboard-tab-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 44px;
   background: transparent;
   border: none;
   border-bottom: 2px solid transparent;
@@ -940,6 +949,10 @@ code {
 }
 
 .dashboard-table th {
+  position: sticky;
+  top: 0;
+  background: #ffffff;
+  z-index: 2;
   color: #64748b;
   font-size: 0.82rem;
   text-transform: uppercase;
@@ -1154,7 +1167,7 @@ code {
   }
 }
 
-@media (max-width: 980px) {
+@media (max-width: 1024px) {
   .app-shell,
   .app-shell.app-shell--collapsed {
     grid-template-columns: 1fr;
@@ -1169,7 +1182,7 @@ code {
     top: 0;
     left: 0;
     bottom: 0;
-    width: 280px;
+    width: 250px;
     z-index: 1001;
     transform: translateX(-100%);
     box-shadow: none;

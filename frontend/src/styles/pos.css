@@ -481,6 +481,10 @@
 }
 
 .pos-container .payment-method {
+  min-height: 44px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
   padding: 12px;
   border: 2px solid #e2e8f0;
   border-radius: 6px;
@@ -535,6 +539,10 @@
 }
 
 .pos-container .btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 44px;
   padding: 14px 20px;
   border: none;
   border-radius: 6px;
@@ -918,6 +926,10 @@
 }
 
 .pos-container .quick-cash-btn {
+  min-height: 44px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
   padding: 8px;
   font-size: 13px;
   font-weight: 600;
@@ -942,7 +954,47 @@
   box-shadow: 0 0 0 3px rgba(66, 153, 225, 0.15);
 }
 
-/* Responsive Media Queries (Mobile & Tablet) */
+/* Responsive Media Queries (Tablet & Mobile) */
+@media (max-width: 1024px) and (min-width: 769px) {
+  .pos-container .left-column {
+    flex: 0 0 55%;
+    padding: 16px;
+    gap: 16px;
+  }
+
+  .pos-container .right-column {
+    flex: 0 0 45%;
+  }
+
+  .pos-container .summary-section {
+    padding: 16px;
+  }
+
+  .pos-container .payment-section {
+    padding: 16px;
+  }
+
+  .pos-container .payment-methods {
+    gap: 8px;
+  }
+
+  .pos-container .payment-method {
+    padding: 10px 8px;
+    font-size: 13px;
+    min-height: 44px;
+  }
+
+  .pos-container .quick-cash-grid {
+    grid-template-columns: repeat(2, 1fr);
+    gap: 8px;
+  }
+
+  .pos-container .action-buttons {
+    padding: 16px;
+    gap: 10px;
+  }
+}
+
 @media (max-width: 768px) {
   .pos-container {
     height: 100vh;
