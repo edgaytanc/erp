@@ -4,6 +4,7 @@ from .views import (
     CashRegisterMovementsReportView,
     CriticalStockReportView,
     DailyUtilityReportView,
+    GeneralProductsReportView,
     InventoryByBranchReportView,
     InventoryMovementsReportView,
     InventoryReportView,
@@ -74,6 +75,11 @@ urlpatterns = [
         name="reports-purchases-vs-sales",
     ),
     path("reports/inventory/", InventoryReportView.as_view(), name="reports-inventory"),
+    path(
+        "reports/inventory/general-products/",
+        GeneralProductsReportView.as_view(),
+        name="reports-inventory-general-products",
+    ),
     path(
         "reports/inventory/critical-stock/",
         CriticalStockReportView.as_view(),

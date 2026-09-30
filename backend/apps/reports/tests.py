@@ -313,6 +313,81 @@ class ReportsApiTestCase(APITestCase):
         self.assertEqual(response.data["items"][0]["qty"], "3.00")
         self.assertEqual(response.data["items"][0]["total_cost"], "28.50")
 
+    def test_general_products_report(self):
+        self.authenticate_admin()
+
+        # Crear un segundo producto sin stock
+        product_no_stock = Product.objects.create(
+            category=self.category,
+            sku="FRIJOL-001",
+            name="Frijol",
+            sale_price=Decimal("15.00"),
+            cost_price=Decimal("5.00"),
+            min_stock=Decimal("10.00"),
+        )
+
+        # Crear una segunda sucursal y agregar stock al producto 1
+        branch_secundaria = Branch.objects.create(company=self.company, name="Secundaria")
+        register_purchase_entry(
+            branch=branch_secundaria,
+            product=self.product,
+            qty=Decimal("5.00"),
+            purchase_id="INITIAL_SEC",
+            unit_cost=Decimal("8.00"),
+            created_by=self.admin_user,
+        )
+
+        # 1. Consulta global (sin filtro branch):
+        # self.product tiene 10 en Central + 5 en Secundaria = 15.00
+        # product_no_stock tiene 0.00
+        url = reverse("reports-inventory-general-products")
+        response = self.client.get(url)
+
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.assertEqual(response.data["summary"]["total_products"], 2)
+        self.assertEqual(response.data["summary"]["total_stock"], "15.00")
+        self.assertEqual(len(response.data["items"]), 2)
+
+        items_by_sku = {item["sku"]: item for item in response.data["items"]}
+        
+        # Validar campos del producto con stock
+        arroz_item = items_by_sku["ARROZ-001"]
+        self.assertEqual(arroz_item["name"], "Arroz")
+        self.assertEqual(arroz_item["category_name"], "Abarrotes")
+        self.assertEqual(arroz_item["sale_price"], "25.00")
+        self.assertEqual(arroz_item["cost_price"], "8.00")
+        self.assertEqual(arroz_item["qty_on_hand"], "15.00")
+        self.assertEqual(arroz_item["min_stock"], "5.00")
+
+        # Validar campos del producto sin stock
+        frijol_item = items_by_sku["FRIJOL-001"]
+        self.assertEqual(frijol_item["name"], "Frijol")
+        self.assertEqual(frijol_item["category_name"], "Abarrotes")
+        self.assertEqual(frijol_item["sale_price"], "15.00")
+        self.assertEqual(frijol_item["cost_price"], "5.00")
+        self.assertEqual(frijol_item["qty_on_hand"], "0.00")
+        self.assertEqual(frijol_item["min_stock"], "10.00")
+
+        # 2. Consulta filtrada por sucursal específica (Central)
+        # self.product debe tener 10.00 en Central
+        response_branch = self.client.get(url, {"branch": str(self.branch.id)})
+        self.assertEqual(response_branch.status_code, status.HTTP_200_OK)
+        items_branch = {item["sku"]: item for item in response_branch.data["items"]}
+        self.assertEqual(items_branch["ARROZ-001"]["qty_on_hand"], "10.00")
+        self.assertEqual(items_branch["FRIJOL-001"]["qty_on_hand"], "0.00")
+
+        # 3. Consulta filtrada por sucursal Secundaria
+        response_sec = self.client.get(url, {"branch": str(branch_secundaria.id)})
+        self.assertEqual(response_sec.status_code, status.HTTP_200_OK)
+        items_sec = {item["sku"]: item for item in response_sec.data["items"]}
+        self.assertEqual(items_sec["ARROZ-001"]["qty_on_hand"], "5.00")
+        self.assertEqual(items_sec["FRIJOL-001"]["qty_on_hand"], "0.00")
+
+        # 4. Verificar que productos con stock=0 siempre están incluidos
+        self.assertTrue(any(item["qty_on_hand"] == "0.00" for item in response.data["items"]))
+        self.assertTrue(any(item["qty_on_hand"] != "0.00" for item in response.data["items"]))
+
+
 
 
 

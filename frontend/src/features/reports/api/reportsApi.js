@@ -86,3 +86,11 @@ export async function getInventoryMovementsReport(params = {}) {
   const response = await api.get("/reports/inventory/movements/", { params });
   return response.data;
 }
+
+export async function getGeneralProductsReport(params = {}) {
+  const response = await api.get("/reports/inventory/general-products/", {
+    params,
+  });
+  return response.data;
+}
+

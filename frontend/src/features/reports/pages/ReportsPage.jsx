@@ -6,6 +6,7 @@ import {
   getCashRegisterReport,
   getCriticalStockReport,
   getDailyUtilityReport,
+  getGeneralProductsReport,
   getInventoryByBranchReport,
   getInventoryMovementsReport,
   getInventoryValueReport,
@@ -239,6 +240,25 @@ const REPORT_GROUPS = [
     description:
       "Stock crítico, valor, distribución por sucursal y movimientos.",
     reports: [
+      {
+        id: "general-products",
+        label: "Reporte general de Productos",
+        fetcher: getGeneralProductsReport,
+        usesDates: false,
+        summary: [
+          ["Total Productos", "total_products", "number"],
+          ["Stock Total", "total_stock", "number"],
+        ],
+        columns: [
+          ["SKU", "sku"],
+          ["Categoría", "category_name"],
+          ["Nombre", "name"],
+          ["Precio Venta", "sale_price", "money"],
+          ["Precio Costo", "cost_price", "money"],
+          ["Stock", "qty_on_hand", "number"],
+          ["Mínimo Stock", "min_stock", "number"],
+        ],
+      },
       {
         id: "critical-stock",
         label: "Stock Crítico",
