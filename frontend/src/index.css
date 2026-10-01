@@ -191,16 +191,20 @@ code {
   border: 1px solid rgba(255, 255, 255, 0.1);
   color: #e5eefc;
   border-radius: 0.75rem;
-  padding: 0.6rem;
+  padding: 0.85rem 1rem;
   cursor: pointer;
   display: flex;
   align-items: center;
-  justify-content: center;
-  margin-top: auto;
+  justify-content: flex-start;
+  gap: 0.9rem;
+  width: 100%;
+  white-space: nowrap;
   transition:
     background 0.2s ease,
     border-color 0.2s ease,
-    color 0.2s ease;
+    color 0.2s ease,
+    padding 0.3s ease,
+    justify-content 0.3s ease;
 }
 
 .sidebar__collapse-toggle:hover {
@@ -243,6 +247,9 @@ code {
   }
 
   .sidebar.sidebar--collapsed .sidebar__collapse-toggle {
+    justify-content: center;
+    padding: 0.85rem;
+    gap: 0;
     width: 100%;
   }
 }
