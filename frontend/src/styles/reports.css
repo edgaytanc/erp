@@ -103,6 +103,8 @@
 .reports-filters input,
 .reports-filters select {
   width: 100%;
+  min-height: 44px;
+  font-size: 1rem;
   border: 1px solid #cbd5e1;
   border-radius: 0.5rem;
   padding: 0.75rem;
@@ -300,12 +302,15 @@
   .reports-filters,
   .reports-current,
   .reports-grid,
-  .reports-summary,
   .reports-table-row,
   .reports-detail-row--sales,
   .reports-detail-row--purchases,
   .reports-detail-row--inventory {
     grid-template-columns: 1fr;
+  }
+
+  .reports-summary {
+    grid-template-columns: repeat(2, 1fr);
   }
 
   .reports-current {
@@ -316,7 +321,14 @@
     overflow-x: auto;
     flex-wrap: nowrap;
     -webkit-overflow-scrolling: touch;
+    scroll-snap-type: x mandatory;
+    scroll-behavior: smooth;
+    scrollbar-width: none;
     padding-bottom: 0.25rem;
+  }
+
+  .reports-tabs::-webkit-scrollbar {
+    display: none;
   }
 
   .reports-selector {
@@ -330,6 +342,7 @@
 
   .reports-tab {
     flex: 0 0 auto;
+    scroll-snap-align: start;
   }
 
   .reports-option {
@@ -399,6 +412,12 @@
 
   .reports-data-table td[colspan]::before {
     content: none;
+  }
+}
+
+@media (max-width: 480px) {
+  .reports-summary {
+    grid-template-columns: 1fr;
   }
 }
 
