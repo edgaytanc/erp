@@ -31,16 +31,24 @@ export function ReportTable({ activeReport, reportData, isLoading }) {
                 }
               >
                 {activeReport.columns.map(([label, key, type]) => (
-                  <td key={`${label}-${key}`}>{valueFor(row, key, type)}</td>
+                  <td key={`${label}-${key}`} data-label={label}>
+                    {valueFor(row, key, type)}
+                  </td>
                 ))}
               </tr>
             ))}
             {!isLoading && activeReport.id === "margin" && items.length > 0 ? (
               <tr style={{ fontWeight: "bold", background: "#f1f5f9" }}>
-                <td>Promedio General</td>
-                <td>-</td>
-                <td>-</td>
-                <td>
+                <td data-label={activeReport.columns[0]?.[0] || "Producto"}>
+                  Promedio General
+                </td>
+                <td data-label={activeReport.columns[1]?.[0] || "Precio Venta"}>
+                  -
+                </td>
+                <td data-label={activeReport.columns[2]?.[0] || "Costo Compra"}>
+                  -
+                </td>
+                <td data-label={activeReport.columns[3]?.[0] || "Margen"}>
                   {valueFor(
                     reportData?.summary,
                     "average_margin",

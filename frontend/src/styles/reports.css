@@ -338,6 +338,68 @@
     border-radius: 999px;
     padding: 0 1.25rem;
   }
+
+  /* Responsive Report Table Cards */
+  .reports-data-table {
+    min-width: 100%;
+  }
+
+  .reports-data-table,
+  .reports-data-table thead,
+  .reports-data-table tbody,
+  .reports-data-table th,
+  .reports-data-table td,
+  .reports-data-table tr {
+    display: block;
+  }
+
+  .reports-data-table thead tr {
+    position: absolute;
+    top: -9999px;
+    left: -9999px;
+  }
+
+  .reports-data-table tr {
+    border: 1px solid #e5edf7;
+    border-radius: 0.5rem;
+    margin-bottom: 1rem;
+    padding: 0.5rem;
+    background: #fff;
+    box-shadow: 0 2px 4px rgba(0, 0, 0, 0.02);
+  }
+
+  .reports-data-table td {
+    position: relative;
+    padding-left: 50%;
+    text-align: right;
+    border-bottom: 1px solid #f1f5f9;
+    white-space: normal;
+  }
+
+  .reports-data-table td::before {
+    content: attr(data-label);
+    position: absolute;
+    left: 1rem;
+    width: 45%;
+    text-align: left;
+    font-weight: 700;
+    color: #64748b;
+    font-size: 0.8rem;
+    text-transform: uppercase;
+  }
+
+  .reports-data-table td:last-child {
+    border-bottom: none;
+  }
+
+  .reports-data-table td[colspan] {
+    padding-left: 1rem;
+    text-align: center;
+  }
+
+  .reports-data-table td[colspan]::before {
+    content: none;
+  }
 }
 
 @media print {
