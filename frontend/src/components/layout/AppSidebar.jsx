@@ -92,15 +92,22 @@ export function AppSidebar({
             </NavLink>
           );
         })}
-      </nav>
 
-      <button
-        className="sidebar__collapse-toggle"
-        onClick={() => setIsCollapsed(!isCollapsed)}
-        aria-label={isCollapsed ? "Expandir menú" : "Colapsar menú"}
-      >
-        {isCollapsed ? <ChevronRight size={20} /> : <ChevronLeft size={20} />}
-      </button>
+        <button
+          type="button"
+          className="sidebar__collapse-toggle"
+          onClick={() => setIsCollapsed(!isCollapsed)}
+          aria-label={isCollapsed ? "Expandir panel" : "Contraer panel"}
+          title={isCollapsed ? "Expandir panel" : undefined}
+        >
+          {isCollapsed ? (
+            <ChevronRight size={20} className="sidebar__link-icon" />
+          ) : (
+            <ChevronLeft size={20} className="sidebar__link-icon" />
+          )}
+          <span className="sidebar__link-text">Contraer panel</span>
+        </button>
+      </nav>
     </aside>
   );
 }
