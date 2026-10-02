@@ -244,10 +244,10 @@ class ProductViewSet(viewsets.ModelViewSet):
             row_barcode = (row.get("barcode") or "").strip()
             row_description = (row.get("description") or "").strip()
             row_category_name = (row.get("category") or row.get("category_name") or "").strip()
-            row_skin_type = (row.get("skin_type") or "").strip().upper()
+            row_skin_type_raw = row.get("skin_type")
+            row_target_problems_raw = row.get("target_problems")
+            row_benefits_raw = row.get("benefits")
             row_keywords = (row.get("keywords") or "").strip()
-            row_target_problems_raw = (row.get("target_problems") or "").strip()
-            row_benefits_raw = (row.get("benefits") or "").strip()
             row_is_active_str = (row.get("is_active") or "true").strip().lower()
 
             row_errors = []
@@ -300,21 +300,30 @@ class ProductViewSet(viewsets.ModelViewSet):
                             f"El código de barras '{row_barcode}' ya está registrado en el producto '{conflicting_product.sku}'."
                         )
 
-            skin_type = row_skin_type if row_skin_type in valid_skin_types else ""
+            # Manejo de opcionales y Arrays semánticos para el motor de búsqueda
+            if row_skin_type_raw is not None and str(row_skin_type_raw).strip():
+                clean_skin_type = str(row_skin_type_raw).strip()
+                skin_type = clean_skin_type.upper() if clean_skin_type.upper() in valid_skin_types else clean_skin_type
+            else:
+                skin_type = ""
 
             target_problems = []
-            if row_target_problems_raw:
-                for p in row_target_problems_raw.replace(";", ",").split(","):
-                    p_clean = p.strip().upper()
-                    if p_clean in valid_problems and p_clean not in target_problems:
-                        target_problems.append(p_clean)
+            if row_target_problems_raw is not None and str(row_target_problems_raw).strip():
+                for p in str(row_target_problems_raw).split(","):
+                    p_clean = p.strip()
+                    if p_clean:
+                        p_val = p_clean.upper() if p_clean.upper() in valid_problems else p_clean
+                        if p_val not in target_problems:
+                            target_problems.append(p_val)
 
             benefits = []
-            if row_benefits_raw:
-                for b in row_benefits_raw.replace(";", ",").split(","):
-                    b_clean = b.strip().upper()
-                    if b_clean in valid_benefits and b_clean not in benefits:
-                        benefits.append(b_clean)
+            if row_benefits_raw is not None and str(row_benefits_raw).strip():
+                for b in str(row_benefits_raw).split(","):
+                    b_clean = b.strip()
+                    if b_clean:
+                        b_val = b_clean.upper() if b_clean.upper() in valid_benefits else b_clean
+                        if b_val not in benefits:
+                            benefits.append(b_val)
 
             is_active = row_is_active_str not in ("false", "0", "no", "inactive")
 
@@ -440,6 +449,9 @@ class ProductViewSet(viewsets.ModelViewSet):
                 "min_stock",
                 "category",
                 "barcode",
+                "skin_type",
+                "target_problems",
+                "benefits",
                 "is_active",
             ]
         )
@@ -454,26 +466,24 @@ class ProductViewSet(viewsets.ModelViewSet):
                 "Cuidado Facial",
                 "7401005123456",
                 "GRASA",
-                "ACNE,ROJEZ",
-                "SEBOCONT,CALMANTE",
-                "limpiador sebo granos espinillas poros",
+                "ACNE, ROJEZ",
+                "SEBOCONT, CALMANTE",
                 "true",
             ]
         )
         writer.writerow(
             [
                 "PROD002",
-                "Serum Ácido Hialurónico Concentrado",
-                "Hidratación profunda efecto relleno para líneas de expresión.",
-                "190.00",
-                "110.00",
+                "Detergente Líquido Multiusos Desinfectante",
+                "Limpiador desinfectante concentrado para pisos y superficies.",
+                "45.00",
+                "25.00",
                 "15.00",
-                "Cuidado Facial",
+                "Limpieza",
                 "7401005123457",
                 "TODO",
-                "ARRUGAS",
-                "HIDRAT,ANTIAGE",
-                "suero arrugas lineas hidratacion firmeza",
+                "SUCIEDAD, MAL_OLOR",
+                "LIMPIEZA, AROMA",
                 "true",
             ]
         )
@@ -488,9 +498,8 @@ class ProductViewSet(viewsets.ModelViewSet):
                 "Cuidado Capilar",
                 "",
                 "CAB_GRASO",
-                "CAIDA,CASPA",
+                "CAIDA, CASPA",
                 "ESTIMCAP",
-                "shampoo pelo cuero cabelludo caida",
                 "true",
             ]
         )

@@ -217,7 +217,41 @@ class InventoryAPITestCase(APITestCase):
         response = self.client.get(url)
         self.assertEqual(response.status_code, status.HTTP_200_OK)
         self.assertEqual(response["Content-Type"], "text/csv")
-        self.assertIn("sku,name,description,sale_price,cost_price,min_stock,category,barcode,is_active", response.content.decode("utf-8-sig"))
+        self.assertIn(
+            "sku,name,description,sale_price,cost_price,min_stock,category,barcode,skin_type,target_problems,benefits,is_active",
+            response.content.decode("utf-8-sig"),
+        )
+
+    def test_import_csv_with_semantic_fields(self):
+        csv_content = (
+            "sku,name,description,sale_price,cost_price,min_stock,category,barcode,skin_type,target_problems,benefits,is_active\n"
+            "SEM-001,Jabon Antibacterial,Desc,12.00,8.00,5.00,Higiene,,TODO,\"SUCIEDAD, MAL_OLOR\",\"LIMPIEZA, AROMA\",true\n"
+            "SEM-002,Crema Hidratante,Desc,50.00,30.00,2.00,Facial,,SECA,\"ARRUGAS\",\"HIDRAT, ANTIAGE\",true\n"
+            "SEM-003,Producto Vacio,Desc,10.00,5.00,1.00,Varios,,,,,,true\n"
+        )
+        csv_file = io.BytesIO(csv_content.encode("utf-8"))
+        csv_file.name = "test_semantic_products.csv"
+
+        url = reverse("inventory-products-import-csv")
+        response = self.client.post(url, {"file": csv_file}, format="multipart")
+
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.assertEqual(response.data["creados"], 3)
+
+        p1 = Product.objects.get(sku="SEM-001")
+        self.assertEqual(p1.skin_type, "TODO")
+        self.assertEqual(p1.target_problems, ["SUCIEDAD", "MAL_OLOR"])
+        self.assertEqual(p1.benefits, ["LIMPIEZA", "AROMA"])
+
+        p2 = Product.objects.get(sku="SEM-002")
+        self.assertEqual(p2.skin_type, "SECA")
+        self.assertEqual(p2.target_problems, ["ARRUGAS"])
+        self.assertEqual(p2.benefits, ["HIDRAT", "ANTIAGE"])
+
+        p3 = Product.objects.get(sku="SEM-003")
+        self.assertEqual(p3.skin_type, "")
+        self.assertEqual(p3.target_problems, [])
+        self.assertEqual(p3.benefits, [])
 
     def test_import_csv_success(self):
         csv_content = (
