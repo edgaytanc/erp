@@ -12,34 +12,58 @@ from apps.core.models import Branch, TimeStampedModel
 
 
 class SkinType(models.TextChoices):
+    # Cuidado Personal
     GRASA = "GRASA", "Piel Grasa"
     SECA = "SECA", "Piel Seca"
     MIXTA = "MIXTA", "Piel Mixta"
     SENS = "SENS", "Piel Sensible"
     NORM = "NORM", "Piel Normal"
-    TODO = "TODO", "Todo Tipo de Piel"
     CAB_GRASO = "CAB_GRASO", "Cabello Graso"
     CAB_SECO = "CAB_SECO", "Cabello Seco"
+    # Minimarket General
+    CONSUMO = "CONSUMO", "Consumo Humano (Abarrotes/Bebidas)"
+    ROPA = "ROPA", "Cuidado de la Ropa"
+    SUPERFICIES = "SUPERFICIES", "Limpieza de Superficies"
+    SALUD = "SALUD", "Salud General"
+    TODO = "TODO", "Todo Uso"
 
 
 class TargetProblem(models.TextChoices):
+    # Cuidado Personal y Salud
     ACNE = "ACNE", "Acné"
-    MANCHAS = "MANCHAS", "Manchas"
-    ARRUGAS = "ARRUGAS", "Arrugas"
+    MANCHAS = "MANCHAS", "Manchas en la Piel"
+    ARRUGAS = "ARRUGAS", "Arrugas / Líneas de expresión"
     CAIDA = "CAIDA", "Caída de Cabello"
     CASPA = "CASPA", "Caspa"
     ROJEZ = "ROJEZ", "Rojez / Irritación"
-    DOLOR = "DOLOR", "Dolor Muscular / Articular"
+    DOLOR = "DOLOR", "Dolor / Malestar General"
+    # Minimarket General
+    SUCIEDAD = "SUCIEDAD", "Suciedad / Grasa Doméstica"
+    MANCHAS_ROPA = "MANCHAS_ROPA", "Manchas en Ropa"
+    MAL_OLOR = "MAL_OLOR", "Mal Olor"
+    SED = "SED", "Sed / Deshidratación"
+    HAMBRE = "HAMBRE", "Hambre / Antojo"
+    FALTA_ENERGIA = "FALTA_ENERGIA", "Falta de Energía / Deficiencia"
+    NINGUNO = "NINGUNO", "Recreación / Ocio"
 
 
 class ProductBenefit(models.TextChoices):
+    # Cuidado Personal y Salud
     HIDRAT = "HIDRAT", "Hidratación"
-    SEBOCONT = "SEBOCONT", "Control de Sebo / Matificante"
+    SEBOCONT = "SEBOCONT", "Control de Sebo"
     ANTIAGE = "ANTIAGE", "Anti-edad / Firmeza"
     DESPIGM = "DESPIGM", "Despigmentante / Aclarador"
-    CALMANTE = "CALMANTE", "Calmante / Reparador"
+    CALMANTE = "CALMANTE", "Calmante / Relajante"
     PROTSOL = "PROTSOL", "Protección Solar"
     ESTIMCAP = "ESTIMCAP", "Estimulación Capilar"
+    ALIVIO = "ALIVIO", "Alivio Rápido / Curativo"
+    # Minimarket General
+    LIMPIEZA = "LIMPIEZA", "Limpieza Profunda"
+    DESINFEC = "DESINFEC", "Desinfección / Antibacterial"
+    NUTRICION = "NUTRICION", "Nutrición / Alimentación"
+    REFRESCANTE = "REFRESCANTE", "Refrescante / Quita Sed"
+    AROMA = "AROMA", "Aromatizante / Perfumado"
+    ENTRETEN = "ENTRETEN", "Entretenimiento / Social"
 
 
 class Category(TimeStampedModel):
