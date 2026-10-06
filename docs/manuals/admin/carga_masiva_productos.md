@@ -16,7 +16,7 @@ La herramienta permite a los administradores:
 2. **Actualizar precios, descripciones y configuraciones** de productos existentes de forma masiva (mecanismo *Upsert* basado en el código `sku`).
 3. **Alimentar el motor de búsqueda semántica y recomendaciones del Punto de Venta (POS)** mediante la asignación de atributos estandarizados (`skin_type`, `target_problems` y `benefits`).
 
----
+<div style="page-break-after: always;"></div>
 
 ## 2. Ubicación y Acceso en el Sistema
 
@@ -30,9 +30,9 @@ Para acceder a la funcionalidad de carga masiva, el usuario debe tener una cuent
 5. Se desplegará el panel titulado **"Carga masiva de productos (CSV)"**.
 
 ![Acceso al módulo de Carga Masiva en Configuración](../../assets/images/admin_config_import_screen.png)
-> **Nota para el desarrollador:** Aquí debes insertar una captura de pantalla que muestre la barra lateral de navegación con la opción 'Configuración' resaltada y la pestaña 'Importar' activa con el panel de carga de archivos CSV visible en el área de trabajo principal.
+<!-- > **Nota para el desarrollador:** Aquí debes insertar una captura de pantalla que muestre la barra lateral de navegación con la opción 'Configuración' resaltada y la pestaña 'Importar' activa con el panel de carga de archivos CSV visible en el área de trabajo principal. -->
 
----
+<div style="page-break-after: always;"></div>
 
 ## 3. Preparación del Archivo CSV
 
@@ -72,9 +72,9 @@ El sistema valida cada fila del archivo CSV. Si falta una sola columna obligator
 | `is_active` | Booleano | `true` | Determina si el producto está disponible para la venta (`true` o `false`). Acepta: `true`, `false`, `1`, `0`, `yes`, `no`. |
 
 ![Estructura del archivo CSV en Excel](../../assets/images/csv_template_excel_view.png)
-> **Nota para el desarrollador:** Aquí debes insertar una captura de pantalla que muestre el archivo CSV abierto en una hoja de cálculo (Excel o Google Sheets) destacando los encabezados de columna en la primera fila y al menos dos filas de datos de prueba completadas.
+<!-- > **Nota para el desarrollador:** Aquí debes insertar una captura de pantalla que muestre el archivo CSV abierto en una hoja de cálculo (Excel o Google Sheets) destacando los encabezados de columna en la primera fila y al menos dos filas de datos de prueba completadas. -->
 
----
+<div style="page-break-after: always;"></div>
 
 ## 4. Nuevos Campos Semánticos para el Motor de Búsqueda (Crucial)
 
@@ -165,7 +165,7 @@ A continuación se listan los códigos exactos que el backend procesa e indexa p
 | `AROMA` | Aromatizante / Perfumado | Fragancias placenteras para el ambiente o el cuerpo. |
 | `ENTRETEN` | Entretenimiento / Social | Bebidas sociales, cócteles, reuniones y celebraciones. |
 
----
+<div style="page-break-after: always;"></div>
 
 ## 5. Ejemplos Prácticos de Archivos CSV
 
@@ -197,7 +197,7 @@ AGU-MIN-600,Agua Mineral Purificada 600ml,"Agua de manantial natural baja en sod
 > [!TIP]
 > Observe cómo los campos que contienen comas internas (como `"ACNE, ROJEZ"`) están envueltos entre comillas dobles. Los programas de hojas de cálculo como Excel o Calc se encargan automáticamente de colocar estas comillas al guardar como `.csv`.
 
----
+<div style="page-break-after: always;"></div>
 
 ## 6. Proceso de Ejecución de la Carga Masiva
 
@@ -219,9 +219,9 @@ Si el archivo cumple con todas las reglas, el sistema mostrará una alerta verde
 * Cantidad de productos **actualizados** (SKUs que ya existían y cuyos campos se refrescaron).
 
 ![Notificación de carga exitosa](../../assets/images/import_success_alert.png)
-> **Nota para el desarrollador:** Aquí debes insertar una captura de pantalla que muestre la alerta verde de éxito desplegada debajo del botón de importación, indicando el número exacto de registros creados y actualizados.
+<!-- > **Nota para el desarrollador:** Aquí debes insertar una captura de pantalla que muestre la alerta verde de éxito desplegada debajo del botón de importación, indicando el número exacto de registros creados y actualizados. -->
 
----
+<div style="page-break-after: always;"></div>
 
 ## 7. Manejo de Errores y Preguntas Frecuentes
 
@@ -231,7 +231,7 @@ La importación opera de manera **atómica**: si una sola fila del archivo conti
 Si el archivo contiene fallos, se desplegará una alerta de color rojo que especifica el número de línea del archivo, el `sku` afectado y el motivo del error.
 
 ![Panel de errores de validación de importación](../../assets/images/import_error_report.png)
-> **Nota para el desarrollador:** Aquí debes insertar una captura de pantalla que muestre el recuadro rojo de alerta con la lista de errores detectados (ej: 'Línea 4 (SKU: PROD003): El campo sale_price debe ser un número válido').
+<!-- > **Nota para el desarrollador:** Aquí debes insertar una captura de pantalla que muestre el recuadro rojo de alerta con la lista de errores detectados (ej: 'Línea 4 (SKU: PROD003): El campo sale_price debe ser un número válido'). -->
 
 ---
 
@@ -261,7 +261,7 @@ Si el archivo contiene fallos, se desplegará una alerta de color rojo que espec
 * **Causa:** El archivo fue guardado con codificación `ANSI` o `ISO-8859-1` en lugar de `UTF-8`.
 * **Solución:** Al guardar desde Excel, elija **CSV UTF-8 (delimitado por comas) (*.csv)**. Nuestro ERP procesa nativamente archivos codificados en UTF-8 con o sin marca BOM.
 
----
+<div style="page-break-after: always;"></div>
 
 ## 8. Resumen de Buenas Prácticas
 
