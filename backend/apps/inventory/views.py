@@ -3,6 +3,7 @@ from __future__ import annotations
 import csv
 import io
 import re
+import uuid
 from decimal import Decimal, InvalidOperation
 
 from django.contrib.postgres.search import SearchQuery, SearchRank, SearchVector
@@ -18,6 +19,7 @@ from rest_framework.parsers import FormParser, MultiPartParser
 from rest_framework.response import Response
 
 from apps.accounts.permissions import ModuleRolePermission
+from apps.core.models import Branch
 
 from .models import (
     Category,
@@ -35,6 +37,7 @@ from .serializers import (
     StockMovementSerializer,
     StockSerializer,
 )
+from .services import InventoryService, register_adjustment
 
 
 class StandardResultsSetPagination(PageNumberPagination):
@@ -505,6 +508,19 @@ class ProductViewSet(viewsets.ModelViewSet):
         )
         return response
 
+    @action(
+        detail=False,
+        methods=["post"],
+        url_path="import-stock-csv",
+        parser_classes=[MultiPartParser, FormParser],
+    )
+    def import_stock_csv(self, request):
+        return StockViewSet._handle_import_stock_csv(request)
+
+    @action(detail=False, methods=["get"], url_path="sample-stock-csv")
+    def sample_stock_csv(self, request):
+        return StockViewSet._handle_sample_stock_csv(request)
+
 
 class PosRecommendationView(views.APIView):
     """
@@ -758,3 +774,210 @@ class StockViewSet(mixins.ListModelMixin, mixins.RetrieveModelMixin, viewsets.Ge
             "lowest_items": lowest_items,
         }
         return Response(payload, status=200)
+
+    @action(
+        detail=False,
+        methods=["post"],
+        url_path="import-stock-csv",
+        parser_classes=[MultiPartParser, FormParser],
+    )
+    def import_stock_csv(self, request):
+        return self._handle_import_stock_csv(request)
+
+    @action(detail=False, methods=["get"], url_path="sample-stock-csv")
+    def sample_stock_csv(self, request):
+        return self._handle_sample_stock_csv(request)
+
+    @staticmethod
+    def _handle_import_stock_csv(request):
+        csv_file = request.FILES.get("file")
+        if not csv_file:
+            return Response(
+                {"error": "No se proporcionó ningún archivo."},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        if not csv_file.name.endswith(".csv"):
+            return Response(
+                {"error": "El archivo debe tener formato CSV (.csv)."},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        try:
+            file_data = csv_file.read().decode("utf-8-sig")
+            io_string = io.StringIO(file_data)
+            reader = csv.DictReader(io_string)
+        except Exception as e:
+            return Response(
+                {"error": f"Error al leer el archivo: {str(e)}"},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        if not reader.fieldnames:
+            return Response(
+                {"error": "El archivo CSV está vacío o no contiene encabezados válidos."},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        # Normalizar nombres de columnas a minúsculas sin espacios
+        reader.fieldnames = [h.strip().lower() for h in reader.fieldnames if h is not None]
+        headers = set(reader.fieldnames)
+        required_cols = {"sku", "branch_id", "physical_qty"}
+
+        missing_cols = required_cols - headers
+        if missing_cols:
+            return Response(
+                {
+                    "error": f"El archivo CSV no contiene las columnas obligatorias: {', '.join(sorted(missing_cols))}"
+                },
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        errors = []
+        rows_to_process = []
+        seen_keys = set()
+        product_cache = {}
+        branch_cache = {}
+
+        for index, row in enumerate(reader, start=2):
+            if not any(v and str(v).strip() for v in row.values()):
+                continue
+
+            row_sku = (row.get("sku") or "").strip()
+            row_branch_id = (row.get("branch_id") or "").strip()
+            row_qty_str = (row.get("physical_qty") or "").strip()
+            row_note = (row.get("note") or "").strip()
+
+            row_errors = []
+
+            if not row_sku:
+                row_errors.append("El campo 'sku' es obligatorio.")
+
+            if not row_branch_id:
+                row_errors.append("El campo 'branch_id' es obligatorio.")
+
+            physical_qty = None
+            if not row_qty_str:
+                row_errors.append("El campo 'physical_qty' es obligatorio.")
+            else:
+                try:
+                    physical_qty = Decimal(row_qty_str)
+                    if physical_qty < Decimal("0.00"):
+                        row_errors.append("El campo 'physical_qty' debe ser mayor o igual a 0.")
+                except (ValueError, InvalidOperation):
+                    row_errors.append("El campo 'physical_qty' debe ser un número válido.")
+
+            if row_sku and row_branch_id:
+                key = (row_sku.upper(), row_branch_id.lower())
+                if key in seen_keys:
+                    row_errors.append(
+                        f"El producto con SKU '{row_sku}' y sucursal '{row_branch_id}' está duplicado en el archivo."
+                    )
+                else:
+                    seen_keys.add(key)
+
+            product = None
+            if row_sku:
+                sku_upper = row_sku.upper()
+                if sku_upper not in product_cache:
+                    product_cache[sku_upper] = Product.objects.filter(sku__iexact=row_sku).first()
+                product = product_cache[sku_upper]
+                if not product:
+                    row_errors.append(f"No existe el producto con SKU '{row_sku}'.")
+
+            branch = None
+            if row_branch_id:
+                branch_key = row_branch_id.lower()
+                if branch_key not in branch_cache:
+                    try:
+                        uuid.UUID(row_branch_id)
+                        branch_cache[branch_key] = Branch.objects.filter(id=row_branch_id).first()
+                    except (ValueError, AttributeError):
+                        branch_cache[branch_key] = None
+                branch = branch_cache[branch_key]
+                if not branch:
+                    row_errors.append(f"No existe la sucursal con ID '{row_branch_id}'.")
+
+            if row_errors:
+                errors.append({"linea": index, "sku": row_sku or "N/A", "errores": row_errors})
+            else:
+                rows_to_process.append(
+                    {
+                        "product": product,
+                        "branch": branch,
+                        "physical_qty": physical_qty,
+                        "note": row_note,
+                    }
+                )
+
+        if errors:
+            return Response(
+                {"error": "El archivo contiene errores de validación.", "detalles": errors},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        if not rows_to_process:
+            return Response(
+                {"error": "El archivo no contiene filas de datos para procesar."},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        try:
+            with transaction.atomic():
+                adjusted_count = 0
+                unchanged_count = 0
+
+                for item in rows_to_process:
+                    prod = item["product"]
+                    br = item["branch"]
+                    phys_qty = item["physical_qty"]
+                    item_note = item["note"]
+
+                    stock = InventoryService.get_or_create_stock(prod, br)
+                    difference = Decimal(str(phys_qty)) - stock.qty_on_hand
+
+                    if difference != Decimal("0.00"):
+                        register_adjustment(
+                            branch=br,
+                            product=prod,
+                            qty=difference,
+                            created_by=request.user if request.user and request.user.is_authenticated else None,
+                            note=item_note or "Inventario Físico / Ajuste por CSV",
+                        )
+                        adjusted_count += 1
+                    else:
+                        unchanged_count += 1
+
+            return Response(
+                {
+                    "mensaje": "Carga masiva de inventario físico finalizada con éxito.",
+                    "ajustados": adjusted_count,
+                    "sin_cambios": unchanged_count,
+                    "total": len(rows_to_process),
+                },
+                status=status.HTTP_200_OK,
+            )
+
+        except Exception as e:
+            return Response(
+                {"error": f"Error al procesar el ajuste de inventario: {str(e)}"},
+                status=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            )
+
+    @staticmethod
+    def _handle_sample_stock_csv(request):
+        response = HttpResponse(content_type="text/csv")
+        response["Content-Disposition"] = 'attachment; filename="inventario_fisico_muestra.csv"'
+        response.write(b"\xef\xbb\xbf")
+        writer = csv.writer(response)
+        writer.writerow(["sku", "branch_id", "physical_qty", "note"])
+
+        sample_branch = Branch.objects.filter(is_active=True).first()
+        branch_id_example = str(sample_branch.id) if sample_branch else "00000000-0000-0000-0000-000000000000"
+
+        sample_prod = Product.objects.filter(is_active=True).first()
+        sample_sku = sample_prod.sku if sample_prod else "PROD001"
+
+        writer.writerow([sample_sku, branch_id_example, "50.00", "Inventario Inicial 2026"])
+        writer.writerow(["PROD002", branch_id_example, "120.00", "Conteo físico bodega principal"])
+        return response

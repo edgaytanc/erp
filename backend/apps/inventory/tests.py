@@ -339,6 +339,117 @@ class InventoryAPITestCase(APITestCase):
         response = self.client.post(url, {"file": csv_file}, format="multipart")
         self.assertEqual(response.status_code, status.HTTP_403_FORBIDDEN)
 
+    def test_sample_stock_csv_download(self):
+        url = reverse("inventory-stocks-sample-stock-csv")
+        response = self.client.get(url)
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.assertEqual(response["Content-Type"], "text/csv")
+        content = response.content.decode("utf-8-sig")
+        self.assertIn("sku,branch_id,physical_qty,note", content)
+
+    def test_import_stock_csv_success(self):
+        p2 = Product.objects.create(
+            category=self.category,
+            sku="ARROZ-002",
+            name="Arroz Integral",
+            sale_price=Decimal("12.00"),
+            cost_price=Decimal("8.00"),
+        )
+        # Create initial stock for self.product (qty = 10)
+        stock1 = Stock.objects.create(
+            branch=self.branch,
+            product=self.product,
+            qty_on_hand=Decimal("10.00"),
+        )
+        # p2 has no existing stock record yet (qty = 0)
+
+        csv_content = (
+            "sku,branch_id,physical_qty,note\n"
+            f"{self.product.sku},{self.branch.id},15.00,Ajuste positivo inventario\n"
+            f"{p2.sku},{self.branch.id},20.00,Conteo físico inicial\n"
+        )
+        csv_file = io.BytesIO(csv_content.encode("utf-8"))
+        csv_file.name = "test_stock.csv"
+
+        url = reverse("inventory-stocks-import-stock-csv")
+        response = self.client.post(url, {"file": csv_file}, format="multipart")
+
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.assertEqual(response.data["ajustados"], 2)
+        self.assertEqual(response.data["sin_cambios"], 0)
+
+        stock1.refresh_from_db()
+        self.assertEqual(stock1.qty_on_hand, Decimal("15.00"))
+
+        stock2 = Stock.objects.get(branch=self.branch, product=p2)
+        self.assertEqual(stock2.qty_on_hand, Decimal("20.00"))
+
+        # Verify Kárdex / StockMovements were registered
+        mov1 = StockMovement.objects.filter(product=self.product, branch=self.branch).first()
+        self.assertIsNotNone(mov1)
+        self.assertEqual(mov1.type, StockMovement.Type.IN)
+        self.assertEqual(mov1.qty, Decimal("5.00"))
+        self.assertEqual(mov1.stock_before, Decimal("10.00"))
+        self.assertEqual(mov1.stock_after, Decimal("15.00"))
+        self.assertEqual(mov1.reference_type, ReferenceType.ADJUSTMENT)
+        self.assertEqual(mov1.note, "Ajuste positivo inventario")
+
+        # Now test negative adjustment and unchanged stock in another import
+        csv_content2 = (
+            "sku,branch_id,physical_qty,note\n"
+            f"{self.product.sku},{self.branch.id},8.00,Ajuste negativo merma\n"
+            f"{p2.sku},{self.branch.id},20.00,Sin cambio\n"
+        )
+        csv_file2 = io.BytesIO(csv_content2.encode("utf-8"))
+        csv_file2.name = "test_stock_2.csv"
+
+        response2 = self.client.post(url, {"file": csv_file2}, format="multipart")
+        self.assertEqual(response2.status_code, status.HTTP_200_OK)
+        self.assertEqual(response2.data["ajustados"], 1)
+        self.assertEqual(response2.data["sin_cambios"], 1)
+
+        stock1.refresh_from_db()
+        self.assertEqual(stock1.qty_on_hand, Decimal("8.00"))
+
+        mov2 = StockMovement.objects.filter(product=self.product, branch=self.branch).first()
+        self.assertEqual(mov2.type, StockMovement.Type.OUT)
+        self.assertEqual(mov2.qty, Decimal("7.00"))
+        self.assertEqual(mov2.stock_before, Decimal("15.00"))
+        self.assertEqual(mov2.stock_after, Decimal("8.00"))
+
+    def test_import_stock_csv_validation_errors(self):
+        csv_content = (
+            "sku,branch_id,physical_qty,note\n"
+            "NON-EXISTENT,00000000-0000-0000-0000-000000000000,10.00,Nota\n"
+            f"{self.product.sku},{self.branch.id},-5.00,Negativo\n"
+            f"{self.product.sku},{self.branch.id},10.00,Duplicado\n"
+        )
+        csv_file = io.BytesIO(csv_content.encode("utf-8"))
+        csv_file.name = "test_stock_bad.csv"
+
+        url = reverse("inventory-stocks-import-stock-csv")
+        response = self.client.post(url, {"file": csv_file}, format="multipart")
+
+        self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
+        self.assertIn("detalles", response.data)
+        errors = response.data["detalles"]
+        self.assertTrue(any("No existe el producto" in str(e["errores"]) for e in errors))
+        self.assertTrue(any("No existe la sucursal" in str(e["errores"]) for e in errors))
+        self.assertTrue(any("mayor o igual a 0" in str(e["errores"]) for e in errors))
+
+    def test_import_stock_csv_non_admin_forbidden(self):
+        self.client.force_authenticate(user=self.sales_user)
+        csv_content = (
+            "sku,branch_id,physical_qty,note\n"
+            f"{self.product.sku},{self.branch.id},10.00,Test\n"
+        )
+        csv_file = io.BytesIO(csv_content.encode("utf-8"))
+        csv_file.name = "test_stock.csv"
+
+        url = reverse("inventory-stocks-import-stock-csv")
+        response = self.client.post(url, {"file": csv_file}, format="multipart")
+        self.assertEqual(response.status_code, status.HTTP_403_FORBIDDEN)
+
     def test_needs_pricing_endpoint_returns_products_requiring_pricing(self):
         Product.objects.create(
             category=self.category,
