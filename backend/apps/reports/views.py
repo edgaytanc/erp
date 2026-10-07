@@ -36,13 +36,13 @@ class AdminReportView(APIView):
         return queryset
 
     def apply_branch_filter(self, queryset, branch_field="branch"):
-        branch_id = self.request.query_params.get("branch")
+        branch_id = self.request.query_params.get("branch") or self.request.query_params.get("branch_id")
         if branch_id:
             queryset = queryset.filter(**{branch_field: branch_id})
         return queryset
 
     def apply_cashier_filter(self, queryset, cashier_field="cashier"):
-        cashier_id = self.request.query_params.get("cashier")
+        cashier_id = self.request.query_params.get("cashier") or self.request.query_params.get("cashier_id")
         if cashier_id:
             queryset = queryset.filter(**{cashier_field: cashier_id})
         return queryset
@@ -51,7 +51,7 @@ class AdminReportView(APIView):
         return str(Decimal(value or ZERO).quantize(Decimal("0.01")))
 
     def branch_scope(self, request):
-        branch_id = request.query_params.get("branch")
+        branch_id = request.query_params.get("branch") or request.query_params.get("branch_id")
         if not branch_id:
             return {"branch": None, "branch_name": "Todas las sucursales"}
 
@@ -190,7 +190,7 @@ class PurchasesReportView(AdminReportView):
 
 class InventoryReportView(AdminReportView):
     def get(self, request):
-        branch_id = request.query_params.get("branch")
+        branch_id = request.query_params.get("branch") or request.query_params.get("branch_id")
         qs = Stock.objects.select_related(
             "branch", "product", "product__category"
         ).all()
@@ -241,7 +241,7 @@ class InventoryReportView(AdminReportView):
                     else "",
                     "qty_on_hand": self.money(stock.qty_on_hand),
                     "unit_cost": self.money(stock.product.cost_price),
-                    "sale_price": self.money(stock.product.sale_price),
+                    "sale_price": self.money(stock.sale_price),
                     "inventory_value": self.money(stock.inventory_value),
                     "is_below_min_stock": stock.qty_on_hand <= stock.product.min_stock,
                 }
@@ -1110,7 +1110,9 @@ class ProductMarginReportView(AdminReportView):
                 "product_id",
                 "product__sku",
                 "product__name",
-                "product__sale_price",
+                "sale__branch_id",
+                "sale__branch__name",
+                "unit_price",
                 "product__cost_price",
             )
             .annotate(
@@ -1122,8 +1124,8 @@ class ProductMarginReportView(AdminReportView):
         total_margin = Decimal("0.00")
 
         for row in rows:
-            sale_price = row["product__sale_price"] or Decimal("0.00")
-            cost_price = row["product__cost_price"] or Decimal("0.00")
+            sale_price = row.get("unit_price") or Decimal("0.00")
+            cost_price = row.get("product__cost_price") or Decimal("0.00")
 
             if sale_price > 0:
                 margin = ((sale_price - cost_price) / sale_price) * Decimal("100.0")
@@ -1134,6 +1136,8 @@ class ProductMarginReportView(AdminReportView):
                 "product": str(row["product_id"]),
                 "sku": row["product__sku"],
                 "name": row["product__name"],
+                "branch": str(row["sale__branch_id"]) if row.get("sale__branch_id") else "",
+                "branch_name": row.get("sale__branch__name") or "Sin sucursal",
                 "sale_price": self.money(sale_price),
                 "cost_price": self.money(cost_price),
                 "margin": float(margin),

@@ -73,16 +73,38 @@ export function posReducer(state, action) {
       };
     case POS_ACTIONS.ADD_ITEM: {
       const product = action.payload;
+      // Extraer el precio unitario específico de la sucursal con prioridad de fallback:
+      // branch_price, sale_price, price, o unitPrice previo
+      const rawPrice =
+        product.branch_price !== undefined && product.branch_price !== null
+          ? product.branch_price
+          : product.sale_price !== undefined && product.sale_price !== null
+            ? product.sale_price
+            : product.price !== undefined && product.price !== null
+              ? product.price
+              : product.unitPrice;
+      const unitPrice = Number(rawPrice || 0);
+
       const existingItem = state.cartItems.find(
         (item) => item.productId === product.productId,
       );
       const cartItems = existingItem
         ? state.cartItems.map((item) =>
             item.productId === product.productId
-              ? { ...item, quantity: item.quantity + product.quantity }
+              ? {
+                  ...item,
+                  quantity: item.quantity + product.quantity,
+                  unitPrice: unitPrice > 0 ? unitPrice : item.unitPrice,
+                }
               : item,
           )
-        : [...state.cartItems, product];
+        : [
+            ...state.cartItems,
+            {
+              ...product,
+              unitPrice,
+            },
+          ];
 
       return {
         ...state,

@@ -70,11 +70,20 @@ export function ProductRecommendationModal({
   }
 
   function handleAddToCart(product) {
+    const branchPrice =
+      product.branch_price !== undefined && product.branch_price !== null
+        ? product.branch_price
+        : product.sale_price !== undefined && product.sale_price !== null
+          ? product.sale_price
+          : product.price ?? 0;
+
     onAddProduct({
       id: product.id,
       sku: product.sku,
       name: product.name,
-      price: product.price || product.sale_price,
+      price: branchPrice,
+      sale_price: branchPrice,
+      branch_price: branchPrice,
       stock: product.stock,
     });
 
@@ -196,6 +205,12 @@ export function ProductRecommendationModal({
                 {results.map((product) => {
                   const isAdded = addedProductIds.has(product.id);
                   const mainBenefit = getMainBenefitLabel(product);
+                  const branchPrice =
+                    product.branch_price !== undefined && product.branch_price !== null
+                      ? product.branch_price
+                      : product.sale_price !== undefined && product.sale_price !== null
+                        ? product.sale_price
+                        : product.price ?? 0;
 
                   return (
                     <article className="pos-recommendation-card" key={product.id}>
@@ -212,7 +227,7 @@ export function ProductRecommendationModal({
                       <div className="pos-recommendation-card__meta">
                         <div>
                           <div className="pos-recommendation-card__price">
-                            {formatMoney(product.price || product.sale_price)}
+                            {formatMoney(branchPrice)}
                           </div>
                           <span className="pos-recommendation-card__stock">
                             Stock: {product.stock}

@@ -23,6 +23,13 @@ export function ProductSearchResults({
     >
       {results.map((product, index) => {
         const isOutOfStock = product.stock !== null && product.stock <= 0;
+        const displayPrice =
+          product.branch_price !== undefined && product.branch_price !== null
+            ? product.branch_price
+            : product.sale_price !== undefined && product.sale_price !== null
+              ? product.sale_price
+              : product.price;
+
         return (
           <button
             className={`product-item ${selectedIndex === index ? "selected" : ""} ${isOutOfStock ? "out-of-stock" : ""}`}
@@ -37,7 +44,7 @@ export function ProductSearchResults({
               <p>{product.sku}</p>
             </div>
             <div className="product-price">
-              <div className="price">{formatMoney(product.price)}</div>
+              <div className="price">{formatMoney(displayPrice)}</div>
               <div className={`stock ${isOutOfStock ? "out" : ""}`}>
                 {product.stock === null
                   ? "Stock sin sucursal"

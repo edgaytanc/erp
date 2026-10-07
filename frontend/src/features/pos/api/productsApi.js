@@ -20,6 +20,8 @@ export async function searchPosProducts({
   pageSize = 10,
 } = {}) {
   const productsResponse = await searchProducts({
+    branch: branchId,
+    branch_id: branchId,
     q,
     is_active: true,
     page_size: 100,
@@ -33,6 +35,7 @@ export async function searchPosProducts({
 
   const stocksResponse = await searchStocks({
     branch: branchId,
+    branch_id: branchId,
     q,
     page_size: 200,
   });
@@ -43,12 +46,28 @@ export async function searchPosProducts({
     .map((product) => {
       const stock = stockByProduct.get(product.id);
 
+      // Priorizar el precio de venta específico de la sucursal activa:
+      // 1. stock.sale_price (del registro Stock de la sucursal)
+      // 2. product.branch_price (si es provisto explícitamente)
+      // 3. product.sale_price (calculado por el serializer con branch_id)
+      // 4. product.price
+      const branchPrice =
+        stock?.sale_price !== undefined && stock?.sale_price !== null
+          ? stock.sale_price
+          : product.branch_price !== undefined && product.branch_price !== null
+            ? product.branch_price
+            : product.sale_price !== undefined && product.sale_price !== null
+              ? product.sale_price
+              : product.price ?? 0;
+
       return {
         id: product.id,
         sku: product.sku,
         barcode: product.barcode,
         name: product.name,
-        price: product.sale_price,
+        price: branchPrice,
+        sale_price: branchPrice,
+        branch_price: branchPrice,
         stock: stock ? Number(stock.qty_on_hand) : 0,
       };
     })
@@ -64,6 +83,7 @@ export async function getRecommendations({ q, branchId, limit = 20 } = {}) {
   const response = await api.get("/pos/recommendations/", {
     params: {
       q: q.trim(),
+      branch: branchId,
       branch_id: branchId,
       limit,
     },

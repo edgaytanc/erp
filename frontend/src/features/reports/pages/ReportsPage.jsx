@@ -124,6 +124,7 @@ const REPORT_GROUPS = [
           ["Margen Promedio", "average_margin", "percentage"],
         ],
         columns: [
+          ["SKU", "sku"],
           ["Producto", "name"],
           ["Precio Venta", "sale_price", "money"],
           ["Costo Compra", "cost_price", "money"],
@@ -340,7 +341,15 @@ const REPORT_GROUPS = [
   },
 ];
 
-function buildPdfHtml({ report, data, dateFrom, dateTo, branchLabel }) {
+function buildPdfHtml({
+  report,
+  columns,
+  data,
+  dateFrom,
+  dateTo,
+  branchLabel,
+}) {
+  const effectiveColumns = columns || report.columns;
   const rows = data?.items || [];
   const filters = report.usesDates
     ? `Desde: ${dateFrom || "Inicio"} · Hasta: ${dateTo || "Hoy"} · Sucursal: ${branchLabel}`
@@ -349,7 +358,7 @@ function buildPdfHtml({ report, data, dateFrom, dateTo, branchLabel }) {
     ? rows
         .map(
           (row) =>
-            `<tr>${report.columns
+            `<tr>${effectiveColumns
               .map(
                 ([, key, type]) =>
                   `<td>${escapeHtml(valueFor(row, key, type))}</td>`,
@@ -357,14 +366,16 @@ function buildPdfHtml({ report, data, dateFrom, dateTo, branchLabel }) {
               .join("")}</tr>`,
         )
         .join("")
-    : `<tr><td colspan="${report.columns.length}">Sin datos para los filtros seleccionados.</td></tr>`;
+    : `<tr><td colspan="${effectiveColumns.length}">Sin datos para los filtros seleccionados.</td></tr>`;
 
   const footerHtml =
     report.id === "margin" && rows.length > 0
       ? `<tr style="font-weight: bold; background: #f1f5f9;">
         <td>Promedio General</td>
-        <td>-</td>
-        <td>-</td>
+        ${effectiveColumns
+          .slice(1, -1)
+          .map(() => `<td>-</td>`)
+          .join("")}
         <td>${escapeHtml(valueFor(data?.summary, "average_margin", "percentage"))}</td>
        </tr>`
       : "";
@@ -470,7 +481,7 @@ function buildPdfHtml({ report, data, dateFrom, dateTo, branchLabel }) {
           <main>
             <table>
               <thead>
-                <tr>${report.columns.map(([label]) => `<th>${escapeHtml(label)}</th>`).join("")}</tr>
+                <tr>${effectiveColumns.map(([label]) => `<th>${escapeHtml(label)}</th>`).join("")}</tr>
               </thead>
               <tbody>
                 ${rowsHtml}
@@ -512,6 +523,31 @@ export function ReportsPage() {
       activeGroup.reports[0],
     [activeGroup, activeReportId],
   );
+
+  // Columnas adaptadas por sucursal: si se consultan todas las sucursales en margen, se desglosa por sucursal
+  const reportColumns = useMemo(() => {
+    if (activeReport.id === "margin") {
+      if (!branchId) {
+        return [
+          ["Sucursal", "branch_name"],
+          ["SKU", "sku"],
+          ["Producto", "name"],
+          ["Precio Venta", "sale_price", "money"],
+          ["Costo Compra", "cost_price", "money"],
+          ["Margen", "margin", "percentage"],
+        ];
+      }
+      return [
+        ["SKU", "sku"],
+        ["Producto", "name"],
+        ["Precio Venta", "sale_price", "money"],
+        ["Costo Compra", "cost_price", "money"],
+        ["Margen", "margin", "percentage"],
+      ];
+    }
+    return activeReport.columns;
+  }, [activeReport, branchId]);
+
   const branchLabel = selectedBranchLabel(branchId, branches, reportData);
 
   async function loadReport() {
@@ -519,15 +555,21 @@ export function ReportsPage() {
     setError(null);
 
     try {
-      const params = { branch: branchId || undefined };
+      // Se garantiza el envío de la sucursal activa en 'branch' y 'branch_id'
+      const params = {};
+      if (branchId) {
+        params.branch = branchId;
+        params.branch_id = branchId;
+      }
       if (activeReport.usesDates) {
         params.date_from = dateFrom;
         params.date_to = dateTo;
       }
-      if (activeReport.usesCashiers) {
-        params.cashier = cashierId || undefined;
+      if (activeReport.usesCashiers && cashierId) {
+        params.cashier = cashierId;
+        params.cashier_id = cashierId;
       }
-      if (activeReport.usesLimit) {
+      if (activeReport.usesLimit && limit) {
         params.limit = limit;
       }
 
@@ -582,6 +624,7 @@ export function ReportsPage() {
     printable.document.write(
       buildPdfHtml({
         report: activeReport,
+        columns: reportColumns,
         data: reportData,
         dateFrom,
         dateTo,
@@ -686,6 +729,7 @@ export function ReportsPage() {
 
           <ReportTable
             activeReport={activeReport}
+            columns={reportColumns}
             reportData={reportData}
             isLoading={isLoading}
           />

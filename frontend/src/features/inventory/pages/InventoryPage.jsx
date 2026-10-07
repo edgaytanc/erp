@@ -92,9 +92,15 @@ export function InventoryPage() {
     setError(null);
 
     try {
+      const branchParam = user?.branch ? { branch: user.branch } : {};
       const [categoriesResponse, productsResponse] = await Promise.all([
         listCategories({ page_size: 100 }),
-        listProducts({ q: nextSearchTerm, page_size: 25, ordering: "name" }),
+        listProducts({
+          ...branchParam,
+          q: nextSearchTerm,
+          page_size: 25,
+          ordering: "name",
+        }),
       ]);
 
       setCategories(unwrapResults(categoriesResponse));
@@ -254,10 +260,24 @@ export function InventoryPage() {
         target_problems: productForm.target_problems || [],
         benefits: productForm.benefits || [],
         keywords: productForm.keywords.trim(),
-        sale_price: Number(productForm.sale_price || 0).toFixed(2),
         cost_price: Number(productForm.cost_price || 0).toFixed(2),
         min_stock: Number(productForm.min_stock || 0).toFixed(2),
       };
+
+      if (user?.branch) {
+        payload.branch = user.branch;
+        payload.branch_id = user.branch;
+        payload.branchId = user.branch;
+      }
+
+      // Control estricto de permisos para sale_price:
+      // Si el usuario es admin, enviar sale_price para actualizar el precio local en Stock
+      // Si no es admin, omitir sale_price para evitar el error 403 Forbidden del backend
+      if (user?.role === "admin") {
+        payload.sale_price = Number(productForm.sale_price || 0).toFixed(2);
+      } else {
+        delete payload.sale_price;
+      }
 
       if (isEditingProduct) {
         await updateProduct(editingProductId, payload);
@@ -668,17 +688,27 @@ export function InventoryPage() {
 
                   <div className="inventory-form-row inventory-form-row--three">
                     <label>
-                      <span>Venta</span>
+                      <span>Precio de Venta (Q) *</span>
                       <input
+                        disabled={user?.role !== "admin"}
                         min="0"
                         onChange={(event) =>
                           updateProductField("sale_price", event.target.value)
                         }
-                        required
+                        required={user?.role === "admin"}
                         step="0.01"
                         type="number"
                         value={productForm.sale_price}
                       />
+                      {user?.role !== "admin" ? (
+                        <small style={{ color: "#dc2626", fontSize: "0.75rem", marginTop: "0.25rem", display: "block" }}>
+                          Solo un administrador puede modificar el precio de venta local
+                        </small>
+                      ) : (
+                        <small style={{ color: "#64748b", fontSize: "0.75rem", marginTop: "0.25rem", display: "block" }}>
+                          Este precio de venta se aplicará a tu sucursal actual
+                        </small>
+                      )}
                     </label>
                     <label>
                       <span>Costo</span>
@@ -785,7 +815,14 @@ export function InventoryPage() {
 
               <section className="global-panel">
                 <div className="global-panel-header">
-                  <h3>Productos</h3>
+                  <div>
+                    <h3 style={{ margin: 0 }}>Productos</h3>
+                    {user?.branch_name && (
+                      <p style={{ margin: "0.25rem 0 0", color: "#64748b", fontSize: "0.85rem" }}>
+                        Precios de venta locales para sucursal: <strong>{user.branch_name}</strong>
+                      </p>
+                    )}
+                  </div>
                   <span>
                     {isLoading ? "Cargando..." : `${productCount} registros`}
                   </span>
@@ -816,6 +853,9 @@ export function InventoryPage() {
                           <strong>
                             Q {Number(product.sale_price || 0).toFixed(2)}
                           </strong>
+                          <span style={{ fontSize: "0.75rem", color: "#64748b" }}>
+                            {user?.branch_name ? `Precio local (${user.branch_name})` : "Precio local"}
+                          </span>
                           <span>
                             Costo Q {Number(product.cost_price || 0).toFixed(2)}
                           </span>

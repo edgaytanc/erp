@@ -10,16 +10,24 @@ class CategoryAdmin(admin.ModelAdmin):
     search_fields = ("name", "parent__name")
 
 
+class StockInline(admin.TabularInline):
+    model = Stock
+    extra = 0
+    fields = ("branch", "qty_on_hand", "sale_price", "updated_at")
+    readonly_fields = ("updated_at",)
+
+
 @admin.register(Product)
 class ProductAdmin(admin.ModelAdmin):
-    list_display = ("sku", "name", "category", "sale_price", "cost_price", "min_stock", "is_active")
+    list_display = ("sku", "name", "category", "cost_price", "min_stock", "is_active")
     list_filter = ("is_active", "category")
     search_fields = ("sku", "barcode", "name")
+    inlines = [StockInline]
 
 
 @admin.register(Stock)
 class StockAdmin(admin.ModelAdmin):
-    list_display = ("branch", "product", "qty_on_hand", "updated_at")
+    list_display = ("branch", "product", "qty_on_hand", "sale_price", "updated_at")
     list_filter = ("branch",)
     search_fields = ("product__sku", "product__name")
 

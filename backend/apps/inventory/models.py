@@ -113,7 +113,6 @@ class Product(TimeStampedModel):
     barcode = models.CharField(max_length=100, blank=True, null=True, unique=True)
     name = models.CharField(max_length=180)
     description = models.TextField(blank=True, default="")
-    sale_price = models.DecimalField(max_digits=12, decimal_places=2)
     cost_price = models.DecimalField(max_digits=12, decimal_places=2, default=Decimal("0.00"))
     min_stock = models.DecimalField(max_digits=12, decimal_places=2, default=Decimal("0.00"))
     is_active = models.BooleanField(default=True)
@@ -146,23 +145,78 @@ class Product(TimeStampedModel):
             models.Index(fields=["skin_type"]),
         ]
 
+    def __init__(self, *args, **kwargs):
+        initial_sale = kwargs.pop("sale_price", None)
+        super().__init__(*args, **kwargs)
+        if initial_sale is not None:
+            self._initial_sale_price = Decimal(str(initial_sale))
+
+    def refresh_from_db(self, *args, **kwargs):
+        if hasattr(self, "_sale_price_override"):
+            delattr(self, "_sale_price_override")
+        if hasattr(self, "_initial_sale_price"):
+            delattr(self, "_initial_sale_price")
+        if "sale_price" in self.__dict__:
+            del self.__dict__["sale_price"]
+        super().refresh_from_db(*args, **kwargs)
+
     def clean(self):
-        if self.sale_price < 0:
-            raise ValidationError({"sale_price": "El precio de venta no puede ser negativo."})
         if self.cost_price < 0:
             raise ValidationError({"cost_price": "El precio de costo no puede ser negativo."})
         if self.min_stock < 0:
             raise ValidationError({"min_stock": "El stock mínimo no puede ser negativo."})
 
     @property
+    def sale_price(self) -> Decimal:
+        """
+        Propiedad calculada para retrocompatibilidad.
+        Retorna el precio anotado en la consulta SQL (Subquery),
+        el precio de la sucursal prefetch, el precio del primer stock existente,
+        el precio sugerido inicial en memoria, o el costo.
+        """
+        if hasattr(self, "_sale_price_override"):
+            return self._sale_price_override
+
+        if "sale_price" in self.__dict__:
+            val = self.__dict__["sale_price"]
+            if val is not None:
+                return Decimal(str(val))
+
+        if hasattr(self, "prefetched_branch_stocks") and self.prefetched_branch_stocks:
+            return self.prefetched_branch_stocks[0].sale_price
+
+        first_stock = self.stocks.first()
+        if first_stock and first_stock.sale_price is not None:
+            return first_stock.sale_price
+
+        if getattr(self, "_initial_sale_price", None) is not None:
+            return self._initial_sale_price
+
+        return self.cost_price if self.cost_price is not None else Decimal("0.00")
+
+    @sale_price.setter
+    def sale_price(self, value):
+        self._sale_price_override = Decimal(str(value)) if value is not None else None
+
+    @property
     def needs_pricing(self) -> bool:
         """
         Indica si el producto requiere actualización de precios.
-        Retorna True si el precio de venta o de costo es menor o igual a 0.
+        Retorna True si el precio de costo es menor o igual a 0,
+        o si no tiene precios registrados en sucursales o alguno es menor o igual a 0.
         """
-        sale = self.sale_price if self.sale_price is not None else Decimal("0.00")
         cost = self.cost_price if self.cost_price is not None else Decimal("0.00")
-        return sale <= Decimal("0.00") or cost <= Decimal("0.00")
+        if cost <= Decimal("0.00"):
+            return True
+
+        branch_prices = list(self.stocks.values_list("sale_price", flat=True))
+        if not branch_prices:
+            initial = getattr(self, "_initial_sale_price", None)
+            if initial is not None:
+                return initial <= Decimal("0.00")
+            return True
+
+        return any(price <= Decimal("0.00") for price in branch_prices)
 
     def _generate_sequential_sku(self) -> str:
         existing_skus = Product.objects.filter(sku__startswith="PROD-").values_list("sku", flat=True)
@@ -182,6 +236,9 @@ class Product(TimeStampedModel):
         return candidate
 
     def save(self, *args, **kwargs):
+        is_new = self._state.adding
+        suggested_sale = getattr(self, "_initial_sale_price", None)
+
         if self.barcode == "":
             self.barcode = None
 
@@ -191,6 +248,10 @@ class Product(TimeStampedModel):
             self.sku = self._generate_sequential_sku()
 
         super().save(*args, **kwargs)
+
+        if is_new:
+            from apps.inventory.services import initialize_product_stocks
+            initialize_product_stocks(self, suggested_sale_price=suggested_sale)
 
     def __str__(self) -> str:
         return f"{self.sku} - {self.name}"
@@ -204,6 +265,21 @@ class ReferenceType(models.TextChoices):
     INITIAL = "INITIAL", "Stock inicial"
     TRANSFER = "TRANSFER", "Transferencia"
     SYSTEM = "SYSTEM", "Sistema"
+
+
+class StockManager(models.Manager):
+    def create(self, **kwargs):
+        branch = kwargs.get("branch")
+        product = kwargs.get("product")
+        if branch and product:
+            existing = self.filter(branch=branch, product=product).first()
+            if existing:
+                for k, v in kwargs.items():
+                    if k != "id":
+                        setattr(existing, k, v)
+                existing.save()
+                return existing
+        return super().create(**kwargs)
 
 
 class Stock(TimeStampedModel):
@@ -220,6 +296,9 @@ class Stock(TimeStampedModel):
         related_name="stocks",
     )
     qty_on_hand = models.DecimalField(max_digits=14, decimal_places=2, default=Decimal("0.00"))
+    sale_price = models.DecimalField(max_digits=12, decimal_places=2, default=Decimal("0.00"))
+
+    objects = StockManager()
 
     class Meta:
         db_table = "inventory_stock"
@@ -229,6 +308,12 @@ class Stock(TimeStampedModel):
             models.Index(fields=["branch", "product"]),
             models.Index(fields=["product"]),
         ]
+
+    def clean(self):
+        if self.qty_on_hand < 0:
+            raise ValidationError({"qty_on_hand": "El stock disponible no puede ser negativo."})
+        if self.sale_price < 0:
+            raise ValidationError({"sale_price": "El precio de venta no puede ser negativo."})
 
     def __str__(self) -> str:
         return f"{self.branch} | {self.product} | {self.qty_on_hand}"

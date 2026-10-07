@@ -1,4 +1,6 @@
-from decimal import Decimal
+from __future__ import annotations
+
+from decimal import Decimal, InvalidOperation
 from django.db import transaction
 
 from apps.core.models import Branch
@@ -15,14 +17,62 @@ class InsufficientStockError(BusinessRuleError):
     pass
 
 
+def initialize_product_stocks(
+    product: Product,
+    suggested_sale_price: Decimal | None = None,
+) -> list[Stock]:
+    """
+    Inicializa los registros relacionales de Stock para todas las sucursales activas.
+    Al crear un Product nuevo, itera sobre todas las sucursales activas y crea el
+    registro relacional (Stock) para cada una.
+
+    Define el sale_price inicial de todas las sucursales igual al precio sugerido
+    (si se provee) o al cost_price del producto.
+    """
+    active_branches = list(Branch.objects.filter(is_active=True))
+    cost = product.cost_price if product.cost_price is not None else Decimal("0.00")
+
+    if suggested_sale_price is not None:
+        try:
+            initial_price = Decimal(str(suggested_sale_price))
+        except (ValueError, TypeError, InvalidOperation):
+            initial_price = cost
+    else:
+        initial_price = cost
+
+    stocks = []
+    for branch in active_branches:
+        stock, created = Stock.objects.get_or_create(
+            branch=branch,
+            product=product,
+            defaults={
+                "qty_on_hand": Decimal("0.00"),
+                "sale_price": initial_price,
+            },
+        )
+        if not created and initial_price is not None:
+            stock.sale_price = initial_price
+            stock.save(update_fields=["sale_price", "updated_at"])
+        stocks.append(stock)
+
+    return stocks
+
+
 class InventoryService:
+    @staticmethod
+    def initialize_product_stocks(
+        product: Product,
+        suggested_sale_price: Decimal | None = None,
+    ) -> list[Stock]:
+        return initialize_product_stocks(product, suggested_sale_price=suggested_sale_price)
+
     @staticmethod
     @transaction.atomic
     def get_or_create_stock(product: Product, branch: Branch) -> Stock:
         stock, _ = Stock.objects.select_for_update().get_or_create(
             product=product,
             branch=branch,
-            defaults={"qty_on_hand": Decimal("0.00")},
+            defaults={"qty_on_hand": Decimal("0.00"), "sale_price": product.cost_price or Decimal("0.00")},
         )
         return stock
 
