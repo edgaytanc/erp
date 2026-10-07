@@ -84,3 +84,21 @@ export async function downloadProductsSampleCsv() {
   });
   return response.data;
 }
+
+export async function importStockCsv(file) {
+  const formData = new FormData();
+  formData.append("file", file);
+  const response = await api.post("/inventory/stocks/import-stock-csv/", formData, {
+    headers: {
+      "Content-Type": "multipart/form-data",
+    },
+  });
+  return response.data;
+}
+
+export async function downloadStockSampleCsv() {
+  const response = await api.get("/inventory/stocks/sample-stock-csv/", {
+    responseType: "blob",
+  });
+  return response.data;
+}

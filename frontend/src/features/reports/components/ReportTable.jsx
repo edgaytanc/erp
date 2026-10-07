@@ -1,6 +1,7 @@
 import { valueFor } from "../utils/reportUtils";
 
-export function ReportTable({ activeReport, reportData, isLoading }) {
+export function ReportTable({ activeReport, columns, reportData, isLoading }) {
+  const effectiveColumns = columns || activeReport.columns;
   const items = reportData?.items || [];
 
   return (
@@ -13,7 +14,7 @@ export function ReportTable({ activeReport, reportData, isLoading }) {
         <table className="reports-data-table">
           <thead>
             <tr>
-              {activeReport.columns.map(([label]) => (
+              {effectiveColumns.map(([label]) => (
                 <th key={label}>{label}</th>
               ))}
             </tr>
@@ -23,6 +24,9 @@ export function ReportTable({ activeReport, reportData, isLoading }) {
               <tr
                 key={
                   row.id ||
+                  (row.product && row.branch
+                    ? `${row.product}-${row.branch}`
+                    : null) ||
                   row.product ||
                   row.category ||
                   row.supplier ||
@@ -30,7 +34,7 @@ export function ReportTable({ activeReport, reportData, isLoading }) {
                   index
                 }
               >
-                {activeReport.columns.map(([label, key, type]) => (
+                {effectiveColumns.map(([label, key, type]) => (
                   <td key={`${label}-${key}`} data-label={label}>
                     {valueFor(row, key, type)}
                   </td>
@@ -39,16 +43,20 @@ export function ReportTable({ activeReport, reportData, isLoading }) {
             ))}
             {!isLoading && activeReport.id === "margin" && items.length > 0 ? (
               <tr style={{ fontWeight: "bold", background: "#f1f5f9" }}>
-                <td data-label={activeReport.columns[0]?.[0] || "Producto"}>
+                <td data-label={effectiveColumns[0]?.[0] || "Sucursal"}>
                   Promedio General
                 </td>
-                <td data-label={activeReport.columns[1]?.[0] || "Precio Venta"}>
-                  -
-                </td>
-                <td data-label={activeReport.columns[2]?.[0] || "Costo Compra"}>
-                  -
-                </td>
-                <td data-label={activeReport.columns[3]?.[0] || "Margen"}>
+                {effectiveColumns.slice(1, -1).map(([label, key]) => (
+                  <td key={`footer-${key}`} data-label={label}>
+                    -
+                  </td>
+                ))}
+                <td
+                  data-label={
+                    effectiveColumns[effectiveColumns.length - 1]?.[0] ||
+                    "Margen"
+                  }
+                >
                   {valueFor(
                     reportData?.summary,
                     "average_margin",
@@ -59,7 +67,7 @@ export function ReportTable({ activeReport, reportData, isLoading }) {
             ) : null}
             {!isLoading && items.length === 0 ? (
               <tr>
-                <td colSpan={activeReport.columns.length}>
+                <td colSpan={effectiveColumns.length}>
                   <div className="reports-empty">
                     Sin datos para estos filtros.
                   </div>

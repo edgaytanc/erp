@@ -18,6 +18,8 @@ import {
   updateUser,
   importProductsCsv,
   downloadProductsSampleCsv,
+  importStockCsv,
+  downloadStockSampleCsv,
 } from "../api/adminConfigApi";
 import { ConfigGeneral } from "../components/ConfigGeneral";
 import { ConfigBranches } from "../components/ConfigBranches";
@@ -121,6 +123,12 @@ export function AdminConfigPage() {
   const [csvSuccess, setCsvSuccess] = useState(null);
   const fileInputRef = useRef(null);
 
+  const [stockCsvFile, setStockCsvFile] = useState(null);
+  const [isStockUploading, setIsStockUploading] = useState(false);
+  const [stockCsvErrors, setStockCsvErrors] = useState([]);
+  const [stockCsvSuccess, setStockCsvSuccess] = useState(null);
+  const stockFileInputRef = useRef(null);
+
   const [activeTab, setActiveTab] = useState("general");
 
   function handleFileChange(event) {
@@ -193,6 +201,81 @@ export function AdminConfigPage() {
         extractApiErrorMessage(
           requestError,
           "No se pudo descargar el archivo de muestra.",
+        ),
+      );
+    }
+  }
+
+  function handleStockFileChange(event) {
+    setStockCsvSuccess(null);
+    setStockCsvErrors([]);
+    setError(null);
+    setSuccess(null);
+    if (event.target.files && event.target.files.length > 0) {
+      setStockCsvFile(event.target.files[0]);
+    } else {
+      setStockCsvFile(null);
+    }
+  }
+
+  async function handleStockCsvUpload(event) {
+    event.preventDefault();
+    if (!stockCsvFile) return;
+
+    setIsStockUploading(true);
+    setError(null);
+    setSuccess(null);
+    setStockCsvSuccess(null);
+    setStockCsvErrors([]);
+
+    try {
+      const response = await importStockCsv(stockCsvFile);
+      const successMsg = `Carga masiva de inventario físico finalizada con éxito. Ajustados: ${response.ajustados ?? 0}, Sin cambios: ${response.sin_cambios ?? 0}.`;
+      setSuccess(successMsg);
+      setStockCsvSuccess(successMsg);
+      setStockCsvFile(null);
+      if (stockFileInputRef.current) {
+        stockFileInputRef.current.value = "";
+      }
+    } catch (requestError) {
+      if (requestError.response?.data?.detalles) {
+        setStockCsvErrors(requestError.response.data.detalles);
+        setError(
+          requestError.response.data.error ||
+            "El archivo contiene errores de validación.",
+        );
+      } else {
+        setError(
+          extractApiErrorMessage(
+            requestError,
+            "No se pudo realizar la carga masiva de stock.",
+          ),
+        );
+      }
+    } finally {
+      setIsStockUploading(false);
+    }
+  }
+
+  async function handleDownloadStockSample() {
+    setError(null);
+    setSuccess(null);
+    setStockCsvErrors([]);
+    try {
+      const blob = await downloadStockSampleCsv();
+      const url = window.URL.createObjectURL(blob);
+      const link = document.createElement("a");
+      link.href = url;
+      link.setAttribute("download", "inventario_fisico_muestra.csv");
+      document.body.appendChild(link);
+      link.click();
+      link.parentNode.removeChild(link);
+      window.URL.revokeObjectURL(url);
+    } catch (requestError) {
+      setError(
+        extractApiErrorMessage(
+          requestError,
+          "No se pudo descargar el archivo de muestra de inventario.",
         ),
       );
     }
@@ -644,6 +727,14 @@ export function AdminConfigPage() {
             handleFileChange={handleFileChange}
             handleCsvUpload={handleCsvUpload}
             handleDownloadSample={handleDownloadSample}
+            stockCsvFile={stockCsvFile}
+            isStockUploading={isStockUploading}
+            stockCsvErrors={stockCsvErrors}
+            stockCsvSuccess={stockCsvSuccess}
+            stockFileInputRef={stockFileInputRef}
+            handleStockFileChange={handleStockFileChange}
+            handleStockCsvUpload={handleStockCsvUpload}
+            handleDownloadStockSample={handleDownloadStockSample}
           />
         )}
       </div>

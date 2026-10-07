@@ -421,6 +421,9 @@ export function PurchasesPage() {
     try {
       const payload = {
         ...quickProductForm,
+        branchId: branchId || undefined,
+        branch_id: branchId || undefined,
+        branch: branchId || undefined,
         name: quickProductForm.name.trim(),
         sku: quickProductForm.sku.trim(),
         barcode: quickProductForm.barcode.trim() || null,
@@ -1845,6 +1848,9 @@ export function PurchasesPage() {
                         }))
                       }
                     />
+                    <small style={{ color: "#64748b", fontSize: "0.75rem", marginTop: "0.25rem", display: "block" }}>
+                      Este precio de venta se aplicará a tu sucursal actual
+                    </small>
                   </label>
                 </div>
 

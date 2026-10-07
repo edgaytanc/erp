@@ -3,12 +3,27 @@ from __future__ import annotations
 import csv
 import io
 import re
+import uuid
 from decimal import Decimal, InvalidOperation
 
 from django.contrib.postgres.search import SearchQuery, SearchRank, SearchVector
 from django.db import transaction
-from django.db.models import Case, Count, F, Max, OuterRef, Q, Subquery, Sum, TextField, Value, When
-from django.db.models.functions import Concat
+from django.db.models import (
+    Case,
+    Count,
+    DecimalField,
+    F,
+    Max,
+    OuterRef,
+    Prefetch,
+    Q,
+    Subquery,
+    Sum,
+    TextField,
+    Value,
+    When,
+)
+from django.db.models.functions import Coalesce, Concat
 from django.http import HttpResponse
 from rest_framework import mixins, status, views, viewsets
 from rest_framework.decorators import action
@@ -18,6 +33,7 @@ from rest_framework.parsers import FormParser, MultiPartParser
 from rest_framework.response import Response
 
 from apps.accounts.permissions import ModuleRolePermission
+from apps.core.models import Branch
 
 from .models import (
     Category,
@@ -34,6 +50,11 @@ from .serializers import (
     ProductSerializer,
     StockMovementSerializer,
     StockSerializer,
+)
+from .services import (
+    InventoryService,
+    initialize_product_stocks,
+    register_adjustment,
 )
 
 
@@ -86,8 +107,63 @@ class ProductViewSet(viewsets.ModelViewSet):
     ordering_fields = ["name", "sku", "sale_price", "cost_price", "created_at", "updated_at"]
     ordering = ["name"]
 
+    def _get_branch_id(self) -> str | None:
+        """
+        Determina el branch_id del contexto actual:
+        1. Query param 'branch_id' o 'branch'.
+        2. Sucursal asignada al usuario autenticado (user.branch_id o user.branch).
+        """
+        request = self.request
+        if not request:
+            return None
+        branch_param = request.query_params.get("branch_id") or request.query_params.get("branch")
+        if branch_param:
+            return str(branch_param).strip()
+        user = getattr(request, "user", None)
+        if user and user.is_authenticated:
+            if getattr(user, "branch_id", None):
+                return str(user.branch_id)
+            if getattr(user, "branch", None):
+                return str(user.branch.id)
+        return None
+
     def get_queryset(self):
-        qs = Product.objects.select_related("category").all()
+        branch_id = self._get_branch_id()
+
+        # Construir subquery y prefetch optimizados para evitar problemas de N+1 queries
+        if branch_id:
+            stock_subquery = Stock.objects.filter(
+                product_id=OuterRef("pk"),
+                branch_id=branch_id,
+            ).values("sale_price")[:1]
+
+            branch_stock_prefetch = Prefetch(
+                "stocks",
+                queryset=Stock.objects.filter(branch_id=branch_id),
+                to_attr="prefetched_branch_stocks",
+            )
+        else:
+            stock_subquery = Stock.objects.filter(
+                product_id=OuterRef("pk"),
+            ).values("sale_price")[:1]
+
+            branch_stock_prefetch = Prefetch(
+                "stocks",
+                queryset=Stock.objects.all(),
+                to_attr="prefetched_branch_stocks",
+            )
+
+        qs = (
+            Product.objects.select_related("category")
+            .prefetch_related(branch_stock_prefetch)
+            .annotate(
+                sale_price=Coalesce(
+                    Subquery(stock_subquery),
+                    Value(None, output_field=DecimalField(max_digits=12, decimal_places=2, null=True)),
+                    output_field=DecimalField(max_digits=12, decimal_places=2, null=True),
+                )
+            )
+        )
 
         category_id = self.request.query_params.get("category")
         is_active = self.request.query_params.get("is_active")
@@ -144,6 +220,100 @@ class ProductViewSet(viewsets.ModelViewSet):
         product.is_active = False
         product.save(update_fields=["is_active", "updated_at"])
         return Response(status=204)
+
+    def update(self, request, *args, **kwargs):
+        partial = kwargs.pop("partial", False)
+        instance = self.get_object()
+
+        # Validación estricta de permisos si se intenta actualizar el sale_price
+        if "sale_price" in request.data:
+            user = request.user
+            if not (user and user.is_authenticated):
+                return Response(
+                    {"detail": "Las credenciales de autenticación no fueron provistas."},
+                    status=status.HTTP_401_UNAUTHORIZED,
+                )
+
+            # Debe tener rol de Administrador
+            is_admin = getattr(user, "is_admin", lambda: False)()
+            if not is_admin:
+                return Response(
+                    {"detail": "Solo los administradores tienen permiso para modificar el precio de venta."},
+                    status=status.HTTP_403_FORBIDDEN,
+                )
+
+            # Determinar la sucursal a la que se aplicará el cambio de precio
+            branch_id = (
+                request.query_params.get("branch_id")
+                or request.query_params.get("branch")
+                or request.data.get("branch_id")
+                or request.data.get("branch")
+                or getattr(user, "branch_id", None)
+                or (user.branch.id if getattr(user, "branch", None) else None)
+            )
+
+            # Si el usuario es administrador asignado a una sucursal específica (no superusuario),
+            # no puede modificar precios de otra sucursal
+            if not user.is_superuser and getattr(user, "branch_id", None):
+                if branch_id and str(branch_id) != str(user.branch_id):
+                    return Response(
+                        {"detail": "No tienes permiso para modificar el precio de una sucursal distinta a la tuya."},
+                        status=status.HTTP_403_FORBIDDEN,
+                    )
+                branch_id = user.branch_id
+
+            target_branch = None
+            if branch_id:
+                try:
+                    target_branch = Branch.objects.filter(id=branch_id, is_active=True).first()
+                except Exception:
+                    target_branch = None
+
+            if not target_branch:
+                target_branch = Branch.objects.filter(is_active=True).first()
+
+            if not target_branch:
+                return Response(
+                    {"detail": "No se encontró una sucursal activa para asignar el precio."},
+                    status=status.HTTP_400_BAD_REQUEST,
+                )
+
+            # Validar valor decimal de sale_price
+            new_sale_price_raw = request.data.get("sale_price")
+            try:
+                new_sale_price = Decimal(str(new_sale_price_raw))
+                if new_sale_price < Decimal("0.00"):
+                    return Response(
+                        {"sale_price": ["El precio de venta no puede ser negativo."]},
+                        status=status.HTTP_400_BAD_REQUEST,
+                    )
+            except (ValueError, TypeError, InvalidOperation):
+                return Response(
+                    {"sale_price": ["El precio de venta debe ser un número decimal válido."]},
+                    status=status.HTTP_400_BAD_REQUEST,
+                )
+
+            # Actualizar únicamente el registro relacional (Stock) de ESA sucursal específica
+            stock, _ = Stock.objects.get_or_create(
+                branch=target_branch,
+                product=instance,
+                defaults={"qty_on_hand": Decimal("0.00"), "sale_price": new_sale_price},
+            )
+            stock.sale_price = new_sale_price
+            stock.save(update_fields=["sale_price", "updated_at"])
+
+            # Actualizar en memoria en instance
+            instance.sale_price = new_sale_price
+
+        serializer = self.get_serializer(instance, data=request.data, partial=partial)
+        serializer.is_valid(raise_exception=True)
+        self.perform_update(serializer)
+
+        return Response(serializer.data)
+
+    def partial_update(self, request, *args, **kwargs):
+        kwargs["partial"] = True
+        return self.update(request, *args, **kwargs)
 
     @action(detail=False, methods=["get"], url_path="needs-pricing")
     def needs_pricing(self, request):
@@ -221,7 +391,7 @@ class ProductViewSet(viewsets.ModelViewSet):
         if missing_cols:
             return Response(
                 {
-                    "error": f"El archivo CSV no contiene las columnas obligatorias: {', '.join(missing_cols)}"
+                    "error": f"El archivo CSV no contiene las columnas obligatorias: {', '.join(sorted(missing_cols))}"
                 },
                 status=status.HTTP_400_BAD_REQUEST,
             )
@@ -365,6 +535,7 @@ class ProductViewSet(viewsets.ModelViewSet):
                 imported_count = 0
                 updated_count = 0
                 category_cache = {}
+                active_branches = list(Branch.objects.filter(is_active=True))
 
                 for item in products_to_save:
                     category_obj = None
@@ -381,7 +552,6 @@ class ProductViewSet(viewsets.ModelViewSet):
                         sku=item["sku"],
                         defaults={
                             "name": item["name"],
-                            "sale_price": item["sale_price"],
                             "cost_price": item["cost_price"],
                             "min_stock": item["min_stock"],
                             "barcode": item["barcode"],
@@ -395,9 +565,14 @@ class ProductViewSet(viewsets.ModelViewSet):
                         },
                     )
 
+                    suggested_price = (
+                        item["sale_price"]
+                        if item["sale_price"] is not None and item["sale_price"] > Decimal("0.00")
+                        else (item["cost_price"] or Decimal("0.00"))
+                    )
+
                     if not created:
                         product.name = item["name"]
-                        product.sale_price = item["sale_price"]
                         product.cost_price = item["cost_price"]
                         product.min_stock = item["min_stock"]
                         product.barcode = item["barcode"]
@@ -414,8 +589,29 @@ class ProductViewSet(viewsets.ModelViewSet):
                             product.category = category_obj
                         product.is_active = item["is_active"]
                         product.save()
+
+                        # En actualización: actualizar o crear los registros relacionales de Stock
+                        for branch in active_branches:
+                            stock, s_created = Stock.objects.get_or_create(
+                                branch=branch,
+                                product=product,
+                                defaults={
+                                    "qty_on_hand": Decimal("0.00"),
+                                    "sale_price": suggested_price,
+                                },
+                            )
+                            if not s_created and item["sale_price"] is not None:
+                                stock.sale_price = suggested_price
+                                stock.save(update_fields=["sale_price", "updated_at"])
+
                         updated_count += 1
                     else:
+                        # Al crear un Product nuevo, iterar sobre todas las sucursales activas
+                        # y crear el registro relacional (Stock) con el precio sugerido o de costo
+                        initialize_product_stocks(
+                            product=product,
+                            suggested_sale_price=suggested_price,
+                        )
                         imported_count += 1
 
             return Response(
@@ -505,6 +701,19 @@ class ProductViewSet(viewsets.ModelViewSet):
         )
         return response
 
+    @action(
+        detail=False,
+        methods=["post"],
+        url_path="import-stock-csv",
+        parser_classes=[MultiPartParser, FormParser],
+    )
+    def import_stock_csv(self, request):
+        return StockViewSet._handle_import_stock_csv(request)
+
+    @action(detail=False, methods=["get"], url_path="sample-stock-csv")
+    def sample_stock_csv(self, request):
+        return StockViewSet._handle_sample_stock_csv(request)
+
 
 class PosRecommendationView(views.APIView):
     """
@@ -536,6 +745,12 @@ class PosRecommendationView(views.APIView):
             product_id=OuterRef("pk"),
         ).values("qty_on_hand")[:1]
 
+        # Subquery para obtener el precio de venta en la sucursal indicada
+        price_subquery = Stock.objects.filter(
+            branch_id=branch_id,
+            product_id=OuterRef("pk"),
+        ).values("sale_price")[:1]
+
         # Filtro estricto: producto activo y con stock > 0 en la sucursal indicada
         qs = (
             Product.objects.filter(
@@ -543,7 +758,10 @@ class PosRecommendationView(views.APIView):
                 stocks__branch_id=branch_id,
                 stocks__qty_on_hand__gt=Decimal("0.00"),
             )
-            .annotate(stock_qty=Subquery(stock_subquery))
+            .annotate(
+                stock_qty=Subquery(stock_subquery),
+                sale_price=Subquery(price_subquery),
+            )
             .distinct()
         )
 
@@ -626,7 +844,7 @@ class PosRecommendationView(views.APIView):
         except ValueError:
             limit = 20
 
-        serializer = ProductRecommendationSerializer(ranked_qs[:limit], many=True)
+        serializer = ProductRecommendationSerializer(ranked_qs[:limit], many=True, context={"request": request})
         return Response(serializer.data, status=status.HTTP_200_OK)
 
 
@@ -670,7 +888,7 @@ class StockViewSet(mixins.ListModelMixin, mixins.RetrieveModelMixin, viewsets.Ge
     queryset = Stock.objects.select_related("branch", "product", "product__category").all()
     pagination_class = StandardResultsSetPagination
     filter_backends = [OrderingFilter]
-    ordering_fields = ["qty_on_hand", "product__sku", "product__name", "updated_at"]
+    ordering_fields = ["qty_on_hand", "sale_price", "product__sku", "product__name", "updated_at"]
     ordering = ["product__sku"]
 
     def get_queryset(self):
@@ -758,3 +976,210 @@ class StockViewSet(mixins.ListModelMixin, mixins.RetrieveModelMixin, viewsets.Ge
             "lowest_items": lowest_items,
         }
         return Response(payload, status=200)
+
+    @action(
+        detail=False,
+        methods=["post"],
+        url_path="import-stock-csv",
+        parser_classes=[MultiPartParser, FormParser],
+    )
+    def import_stock_csv(self, request):
+        return self._handle_import_stock_csv(request)
+
+    @action(detail=False, methods=["get"], url_path="sample-stock-csv")
+    def sample_stock_csv(self, request):
+        return self._handle_sample_stock_csv(request)
+
+    @staticmethod
+    def _handle_import_stock_csv(request):
+        csv_file = request.FILES.get("file")
+        if not csv_file:
+            return Response(
+                {"error": "No se proporcionó ningún archivo."},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        if not csv_file.name.endswith(".csv"):
+            return Response(
+                {"error": "El archivo debe tener formato CSV (.csv)."},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        try:
+            file_data = csv_file.read().decode("utf-8-sig")
+            io_string = io.StringIO(file_data)
+            reader = csv.DictReader(io_string)
+        except Exception as e:
+            return Response(
+                {"error": f"Error al leer el archivo: {str(e)}"},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        if not reader.fieldnames:
+            return Response(
+                {"error": "El archivo CSV está vacío o no contiene encabezados válidos."},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        # Normalizar nombres de columnas a minúsculas sin espacios
+        reader.fieldnames = [h.strip().lower() for h in reader.fieldnames if h is not None]
+        headers = set(reader.fieldnames)
+        required_cols = {"sku", "branch_id", "physical_qty"}
+
+        missing_cols = required_cols - headers
+        if missing_cols:
+            return Response(
+                {
+                    "error": f"El archivo CSV no contiene las columnas obligatorias: {', '.join(sorted(missing_cols))}"
+                },
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        errors = []
+        rows_to_process = []
+        seen_keys = set()
+        product_cache = {}
+        branch_cache = {}
+
+        for index, row in enumerate(reader, start=2):
+            if not any(v and str(v).strip() for v in row.values()):
+                continue
+
+            row_sku = (row.get("sku") or "").strip()
+            row_branch_id = (row.get("branch_id") or "").strip()
+            row_qty_str = (row.get("physical_qty") or "").strip()
+            row_note = (row.get("note") or "").strip()
+
+            row_errors = []
+
+            if not row_sku:
+                row_errors.append("El campo 'sku' es obligatorio.")
+
+            if not row_branch_id:
+                row_errors.append("El campo 'branch_id' es obligatorio.")
+
+            physical_qty = None
+            if not row_qty_str:
+                row_errors.append("El campo 'physical_qty' es obligatorio.")
+            else:
+                try:
+                    physical_qty = Decimal(row_qty_str)
+                    if physical_qty < Decimal("0.00"):
+                        row_errors.append("El campo 'physical_qty' debe ser mayor o igual a 0.")
+                except (ValueError, InvalidOperation):
+                    row_errors.append("El campo 'physical_qty' debe ser un número válido.")
+
+            if row_sku and row_branch_id:
+                key = (row_sku.upper(), row_branch_id.lower())
+                if key in seen_keys:
+                    row_errors.append(
+                        f"El producto con SKU '{row_sku}' y sucursal '{row_branch_id}' está duplicado en el archivo."
+                    )
+                else:
+                    seen_keys.add(key)
+
+            product = None
+            if row_sku:
+                sku_upper = row_sku.upper()
+                if sku_upper not in product_cache:
+                    product_cache[sku_upper] = Product.objects.filter(sku__iexact=row_sku).first()
+                product = product_cache[sku_upper]
+                if not product:
+                    row_errors.append(f"No existe el producto con SKU '{row_sku}'.")
+
+            branch = None
+            if row_branch_id:
+                branch_key = row_branch_id.lower()
+                if branch_key not in branch_cache:
+                    try:
+                        uuid.UUID(row_branch_id)
+                        branch_cache[branch_key] = Branch.objects.filter(id=row_branch_id).first()
+                    except (ValueError, AttributeError):
+                        branch_cache[branch_key] = None
+                branch = branch_cache[branch_key]
+                if not branch:
+                    row_errors.append(f"No existe la sucursal con ID '{row_branch_id}'.")
+
+            if row_errors:
+                errors.append({"linea": index, "sku": row_sku or "N/A", "errores": row_errors})
+            else:
+                rows_to_process.append(
+                    {
+                        "product": product,
+                        "branch": branch,
+                        "physical_qty": physical_qty,
+                        "note": row_note,
+                    }
+                )
+
+        if errors:
+            return Response(
+                {"error": "El archivo contiene errores de validación.", "detalles": errors},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        if not rows_to_process:
+            return Response(
+                {"error": "El archivo no contiene filas de datos para procesar."},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        try:
+            with transaction.atomic():
+                adjusted_count = 0
+                unchanged_count = 0
+
+                for item in rows_to_process:
+                    prod = item["product"]
+                    br = item["branch"]
+                    phys_qty = item["physical_qty"]
+                    item_note = item["note"]
+
+                    stock = InventoryService.get_or_create_stock(prod, br)
+                    difference = Decimal(str(phys_qty)) - stock.qty_on_hand
+
+                    if difference != Decimal("0.00"):
+                        register_adjustment(
+                            branch=br,
+                            product=prod,
+                            qty=difference,
+                            created_by=request.user if request.user and request.user.is_authenticated else None,
+                            note=item_note or "Inventario Físico / Ajuste por CSV",
+                        )
+                        adjusted_count += 1
+                    else:
+                        unchanged_count += 1
+
+            return Response(
+                {
+                    "mensaje": "Carga masiva de inventario físico finalizada con éxito.",
+                    "ajustados": adjusted_count,
+                    "sin_cambios": unchanged_count,
+                    "total": len(rows_to_process),
+                },
+                status=status.HTTP_200_OK,
+            )
+
+        except Exception as e:
+            return Response(
+                {"error": f"Error al procesar el ajuste de inventario: {str(e)}"},
+                status=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            )
+
+    @staticmethod
+    def _handle_sample_stock_csv(request):
+        response = HttpResponse(content_type="text/csv")
+        response["Content-Disposition"] = 'attachment; filename="inventario_fisico_muestra.csv"'
+        response.write(b"\xef\xbb\xbf")
+        writer = csv.writer(response)
+        writer.writerow(["sku", "branch_id", "physical_qty", "note"])
+
+        sample_branch = Branch.objects.filter(is_active=True).first()
+        branch_id_example = str(sample_branch.id) if sample_branch else "00000000-0000-0000-0000-000000000000"
+
+        sample_prod = Product.objects.filter(is_active=True).first()
+        sample_sku = sample_prod.sku if sample_prod else "PROD001"
+
+        writer.writerow([sample_sku, branch_id_example, "50.00", "Inventario Inicial 2026"])
+        writer.writerow(["PROD002", branch_id_example, "120.00", "Conteo físico bodega principal"])
+        return response

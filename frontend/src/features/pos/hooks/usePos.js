@@ -148,6 +148,15 @@ export function usePos() {
         return;
       }
 
+      const branchPrice =
+        product.branch_price !== undefined && product.branch_price !== null
+          ? product.branch_price
+          : product.sale_price !== undefined && product.sale_price !== null
+            ? product.sale_price
+            : product.price !== undefined && product.price !== null
+              ? product.price
+              : product.unitPrice ?? 0;
+
       dispatch({
         type: POS_ACTIONS.ADD_ITEM,
         payload: {
@@ -155,7 +164,10 @@ export function usePos() {
           sku: product.sku,
           name: product.name,
           stock: product.stock,
-          unitPrice: product.price,
+          unitPrice: Number(branchPrice),
+          branch_price: Number(branchPrice),
+          sale_price: Number(branchPrice),
+          price: Number(branchPrice),
           quantity: 1,
         },
       });

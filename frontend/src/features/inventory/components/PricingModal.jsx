@@ -1,12 +1,14 @@
 import { useState } from "react";
 
 import { Button } from "../../../components/common/Button";
+import { useAuth } from "../../../contexts/AuthContext";
 import { extractApiErrorMessage } from "../../../lib/apiError";
 import { updateProduct } from "../api/inventoryApi";
 import "../../../styles/pos.css";
 import "../../../styles/inventory.css";
 
 export function PricingModal({ product, isOpen, onClose, onSuccess }) {
+  const { user } = useAuth();
   const [salePrice, setSalePrice] = useState(
     product && Number(product.sale_price || 0) > 0
       ? Number(product.sale_price).toFixed(2)
@@ -46,6 +48,8 @@ export function PricingModal({ product, isOpen, onClose, onSuccess }) {
       const payload = {
         sale_price: parsedSale.toFixed(2),
         cost_price: parsedCost.toFixed(2),
+        branch: user?.branch || undefined,
+        branch_id: user?.branch || undefined,
       };
       const updatedProduct = await updateProduct(product.id, payload);
       if (onSuccess) {
@@ -137,10 +141,11 @@ export function PricingModal({ product, isOpen, onClose, onSuccess }) {
               <input
                 autoFocus
                 className="field__input"
+                disabled={user?.role !== "admin"}
                 min="0.01"
                 onChange={(e) => setSalePrice(e.target.value)}
                 placeholder="0.00"
-                required
+                required={user?.role === "admin"}
                 step="0.01"
                 style={{
                   width: "100%",
@@ -152,6 +157,15 @@ export function PricingModal({ product, isOpen, onClose, onSuccess }) {
                 type="number"
                 value={salePrice}
               />
+              {user?.role !== "admin" ? (
+                <small style={{ color: "#dc2626", fontSize: "0.75rem", marginTop: "0.25rem", display: "block" }}>
+                  Solo un administrador puede modificar el precio de venta local
+                </small>
+              ) : (
+                <small style={{ color: "#64748b", fontSize: "0.75rem", marginTop: "0.25rem", display: "block" }}>
+                  Este precio de venta se aplicará a tu sucursal actual
+                </small>
+              )}
             </label>
 
             <label style={{ display: "grid", gap: "0.35rem" }}>
