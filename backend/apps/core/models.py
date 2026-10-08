@@ -48,3 +48,57 @@ class Branch(TimeStampedModel):
 
     def __str__(self) -> str:
         return f"{self.name}"
+
+
+class NotificationType(models.TextChoices):
+    LOW_STOCK = "LOW_STOCK", "Stock Mínimo"
+    NEW_PURCHASE = "NEW_PURCHASE", "Nueva Compra"
+
+
+class Notification(TimeStampedModel):
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+
+    branch = models.ForeignKey(
+        Branch,
+        on_delete=models.CASCADE,
+        related_name="notifications",
+        verbose_name="Sucursal",
+    )
+    notification_type = models.CharField(
+        max_length=32,
+        choices=NotificationType.choices,
+        db_index=True,
+        verbose_name="Tipo de notificación",
+    )
+    title = models.CharField(
+        max_length=255,
+        verbose_name="Título",
+    )
+    message = models.TextField(
+        verbose_name="Mensaje",
+    )
+    is_read = models.BooleanField(
+        default=False,
+        db_index=True,
+        verbose_name="Leída",
+    )
+    reference_id = models.CharField(
+        max_length=255,
+        blank=True,
+        null=True,
+        db_index=True,
+        verbose_name="ID de referencia",
+    )
+
+    class Meta:
+        db_table = "core_notification"
+        ordering = ["-created_at"]
+        verbose_name = "Notificación"
+        verbose_name_plural = "Notificaciones"
+        indexes = [
+            models.Index(fields=["branch", "is_read"], name="ix_notif_branch_read"),
+            models.Index(fields=["branch", "-created_at"], name="ix_notif_branch_created"),
+        ]
+
+    def __str__(self) -> str:
+        return f"[{self.get_notification_type_display()}] {self.title} - {self.branch.name}"

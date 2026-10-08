@@ -1,13 +1,23 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { useNavigate } from "react-router-dom";
-import { Menu } from "lucide-react";
+import {
+  Bell,
+  BellOff,
+  CheckCheck,
+  Menu,
+  AlertTriangle,
+  Package,
+  Info,
+} from "lucide-react";
 
 import { useAuth } from "../../contexts/AuthContext";
 import { Button } from "../common/Button";
 import {
-  listPurchases,
+  listNotifications,
+  markNotificationAsRead,
+  markAllNotificationsAsRead,
   unwrapResults,
-} from "../../features/purchases/api/purchasesApi";
+} from "../../features/system/api/notificationsApi";
 
 const ROLE_LABELS = {
   admin: "Administrador",
@@ -15,13 +25,78 @@ const ROLE_LABELS = {
   sales: "Vendedor",
 };
 
+/**
+ * Formatea una fecha ISO a un formato amigable en español.
+ */
+function formatNotificationDate(dateString) {
+  if (!dateString) return "";
+  try {
+    const date = new Date(dateString);
+    if (isNaN(date.getTime())) return "";
+
+    const now = new Date();
+    const diffMs = now.getTime() - date.getTime();
+    const diffSec = Math.floor(diffMs / 1000);
+    const diffMin = Math.floor(diffSec / 60);
+    const diffHours = Math.floor(diffMin / 60);
+    const diffDays = Math.floor(diffHours / 24);
+
+    if (diffSec < 60) {
+      return "Hace un momento";
+    }
+    if (diffMin < 60) {
+      return `Hace ${diffMin} min`;
+    }
+    if (diffHours < 24) {
+      return `Hace ${diffHours} ${diffHours === 1 ? "hora" : "horas"}`;
+    }
+    if (diffDays === 1) {
+      const timeStr = date.toLocaleTimeString("es-GT", {
+        hour: "2-digit",
+        minute: "2-digit",
+      });
+      return `Ayer, ${timeStr}`;
+    }
+    if (diffDays < 7) {
+      return `Hace ${diffDays} días`;
+    }
+
+    return date.toLocaleDateString("es-GT", {
+      day: "2-digit",
+      month: "short",
+      year: "numeric",
+      hour: "2-digit",
+      minute: "2-digit",
+    });
+  } catch {
+    return dateString;
+  }
+}
+
+/**
+ * Retorna el icono apropiado según el tipo de notificación.
+ */
+function getNotificationIcon(type) {
+  switch (type) {
+    case "LOW_STOCK":
+      return <AlertTriangle size={18} className="notification-icon--warning" />;
+    case "NEW_PURCHASE":
+      return <Package size={18} className="notification-icon--info" />;
+    default:
+      return <Info size={18} className="notification-icon--default" />;
+  }
+}
+
 export function AppHeader({ isMobileOpen, setIsMobileOpen }) {
   const navigate = useNavigate();
   const { user, logout } = useAuth();
-  const [pendingPurchases, setPendingPurchases] = useState([]);
-  const [showNotifications, setShowNotifications] = useState(false);
 
-  const isAdmin = user?.role === "admin";
+  const [notifications, setNotifications] = useState([]);
+  const [unreadCount, setUnreadCount] = useState(0);
+  const [isNotificationsOpen, setIsNotificationsOpen] = useState(false);
+  const [isMarkingAll, setIsMarkingAll] = useState(false);
+
+  const notificationsRef = useRef(null);
 
   const fullName = useMemo(() => {
     const name = [user?.first_name, user?.last_name]
@@ -31,31 +106,118 @@ export function AppHeader({ isMobileOpen, setIsMobileOpen }) {
     return name || user?.username || "Usuario";
   }, [user]);
 
+  // Carga inicial y sondeo periódico de notificaciones cada 60 segundos
   useEffect(() => {
-    if (!isAdmin) return;
+    if (!user) return;
 
     let isMounted = true;
 
-    async function fetchPendingPurchases() {
+    async function fetchNotifications() {
       try {
-        const response = await listPurchases({ status: "DRAFT" });
+        const data = await listNotifications();
         if (isMounted) {
-          setPendingPurchases(unwrapResults(response));
+          const items = unwrapResults(data);
+          setNotifications(items);
+          setUnreadCount(items.filter((item) => !item.is_read).length);
         }
       } catch (err) {
-        console.error("Error fetching purchases for notifications", err);
+        console.error("Error al cargar notificaciones:", err);
       }
     }
 
-    fetchPendingPurchases();
-    // Poll every 30 seconds for new drafts
-    const interval = setInterval(fetchPendingPurchases, 30000);
+    fetchNotifications();
+    const interval = setInterval(fetchNotifications, 60000);
 
     return () => {
       isMounted = false;
       clearInterval(interval);
     };
-  }, [isAdmin]);
+  }, [user]);
+
+  // Cerrar el dropdown al hacer clic fuera o presionar Escape
+  useEffect(() => {
+    function handleClickOutside(event) {
+      if (
+        notificationsRef.current &&
+        !notificationsRef.current.contains(event.target)
+      ) {
+        setIsNotificationsOpen(false);
+      }
+    }
+
+    function handleKeyDown(event) {
+      if (event.key === "Escape") {
+        setIsNotificationsOpen(false);
+      }
+    }
+
+    if (isNotificationsOpen) {
+      document.addEventListener("mousedown", handleClickOutside);
+      document.addEventListener("keydown", handleKeyDown);
+    }
+
+    return () => {
+      document.removeEventListener("mousedown", handleClickOutside);
+      document.removeEventListener("keydown", handleKeyDown);
+    };
+  }, [isNotificationsOpen]);
+
+  // Marcar una notificación individual como leída
+  const handleNotificationClick = async (notification) => {
+    if (!notification.is_read) {
+      try {
+        await markNotificationAsRead(notification.id);
+        setNotifications((prev) =>
+          prev.map((item) =>
+            item.id === notification.id ? { ...item, is_read: true } : item,
+          ),
+        );
+        setUnreadCount((prev) => Math.max(0, prev - 1));
+      } catch (err) {
+        console.error("Error al marcar notificación como leída:", err);
+      }
+    }
+
+    // Redirección contextual según el tipo de notificación
+    if (notification.notification_type === "LOW_STOCK") {
+      setIsNotificationsOpen(false);
+      navigate("/inventory");
+    } else if (notification.notification_type === "NEW_PURCHASE") {
+      setIsNotificationsOpen(false);
+      navigate("/purchases");
+    }
+  };
+
+  // Marcar todas las notificaciones como leídas
+  const handleMarkAllAsRead = async (event) => {
+    event.stopPropagation();
+    if (unreadCount === 0 || isMarkingAll) return;
+
+    setIsMarkingAll(true);
+    try {
+      await markAllNotificationsAsRead();
+      setNotifications((prev) =>
+        prev.map((item) => ({ ...item, is_read: true })),
+      );
+      setUnreadCount(0);
+    } catch (err) {
+      console.error(
+        "Error al marcar todas las notificaciones como leídas:",
+        err,
+      );
+    } finally {
+      setIsMarkingAll(false);
+    }
+  };
+
+  // Notificaciones ordenadas cronológicamente (más recientes primero)
+  const sortedNotifications = useMemo(() => {
+    return [...notifications].sort((a, b) => {
+      const dateA = new Date(a.created_at || 0).getTime();
+      const dateB = new Date(b.created_at || 0).getTime();
+      return dateB - dateA;
+    });
+  }, [notifications]);
 
   const handleLogout = () => {
     logout();
@@ -79,135 +241,138 @@ export function AppHeader({ isMobileOpen, setIsMobileOpen }) {
       </div>
 
       <div className="app-header__meta">
-        {isAdmin && (
+        {user && (
           <div
             className="app-header__notifications"
-            style={{ position: "relative" }}
+            ref={notificationsRef}
           >
-            <Button
-              variant="secondary"
-              onClick={() => setShowNotifications(!showNotifications)}
-              style={{
-                position: "relative",
-                padding: "0.6rem 0.8rem",
-                display: "flex",
-                alignItems: "center",
-                gap: "0.5rem",
-              }}
+            <button
+              type="button"
+              className={`app-header__bell-btn ${
+                isNotificationsOpen ? "app-header__bell-btn--active" : ""
+              }`}
+              onClick={() => setIsNotificationsOpen((prev) => !prev)}
+              aria-label="Notificaciones"
+              aria-expanded={isNotificationsOpen}
+              title="Notificaciones"
             >
-              <span>🔔</span>
-              {pendingPurchases.length > 0 && (
-                <span
-                  style={{
-                    position: "absolute",
-                    top: "-5px",
-                    right: "-5px",
-                    background: "#ef4444",
-                    color: "white",
-                    borderRadius: "50%",
-                    padding: "0.2rem 0.5rem",
-                    fontSize: "0.75rem",
-                    fontWeight: "bold",
-                    lineHeight: "1",
-                  }}
-                >
-                  {pendingPurchases.length}
+              <Bell size={20} />
+              {unreadCount > 0 && (
+                <span className="app-header__badge">
+                  {unreadCount > 99 ? "99+" : unreadCount}
                 </span>
               )}
-            </Button>
+            </button>
 
-            {showNotifications && (
+            {isNotificationsOpen && (
               <div
-                className="card"
-                style={{
-                  position: "absolute",
-                  right: 0,
-                  top: "100%",
-                  marginTop: "0.5rem",
-                  width: "320px",
-                  zIndex: 100,
-                  boxShadow: "0 10px 25px rgba(0,0,0,0.15)",
-                  maxHeight: "400px",
-                  overflowY: "auto",
-                }}
+                className="notifications-dropdown"
+                role="dialog"
+                aria-label="Panel de notificaciones"
               >
-                <div
-                  className="card__header"
-                  style={{
-                    padding: "0.8rem 1rem",
-                    borderBottom: "1px solid #e5edf7",
-                  }}
-                >
-                  <h4
-                    className="card__title"
-                    style={{ fontSize: "0.95rem", margin: 0 }}
-                  >
-                    Órdenes DRAFT Pendientes
-                  </h4>
-                </div>
-                <div className="card__body" style={{ padding: "0.5rem 1rem" }}>
-                  {pendingPurchases.length === 0 ? (
-                    <p
-                      style={{
-                        margin: "1rem 0",
-                        color: "#64748b",
-                        textAlign: "center",
-                        fontSize: "0.9rem",
-                      }}
+                <div className="notifications-dropdown__header">
+                  <div className="notifications-dropdown__title-group">
+                    <h3 className="notifications-dropdown__title">
+                      Notificaciones
+                    </h3>
+                    {unreadCount > 0 && (
+                      <span className="notifications-dropdown__unread-badge">
+                        {unreadCount} {unreadCount === 1 ? "nueva" : "nuevas"}
+                      </span>
+                    )}
+                  </div>
+
+                  {unreadCount > 0 && (
+                    <button
+                      type="button"
+                      className="notifications-dropdown__mark-all-btn"
+                      onClick={handleMarkAllAsRead}
+                      disabled={isMarkingAll}
+                      title="Marcar todas como leídas"
                     >
-                      No hay órdenes pendientes.
-                    </p>
+                      <CheckCheck size={15} />
+                      <span>
+                        {isMarkingAll
+                          ? "Marcando..."
+                          : "Marcar todas como leídas"}
+                      </span>
+                    </button>
+                  )}
+                </div>
+
+                <div className="notifications-dropdown__body">
+                  {sortedNotifications.length === 0 ? (
+                    <div className="notifications-dropdown__empty">
+                      <div className="notifications-dropdown__empty-icon">
+                        <BellOff size={32} />
+                      </div>
+                      <p className="notifications-dropdown__empty-title">
+                        No tienes notificaciones
+                      </p>
+                      <span className="notifications-dropdown__empty-subtitle">
+                        Te avisaremos cuando haya novedades en tu sucursal.
+                      </span>
+                    </div>
                   ) : (
-                    pendingPurchases.map((purchase) => (
-                      <div
-                        key={purchase.id}
-                        style={{
-                          padding: "0.75rem 0",
-                          borderBottom: "1px solid #edf2f7",
-                          fontSize: "0.85rem",
-                          textAlign: "left",
-                        }}
-                      >
-                        <div
-                          style={{
-                            display: "flex",
-                            justifyContent: "space-between",
-                            fontWeight: "600",
+                    <ul className="notifications-dropdown__list">
+                      {sortedNotifications.map((notif) => (
+                        <li
+                          key={notif.id}
+                          className={`notifications-dropdown__item ${
+                            !notif.is_read
+                              ? "notifications-dropdown__item--unread"
+                              : ""
+                          }`}
+                          onClick={() => handleNotificationClick(notif)}
+                          role="button"
+                          tabIndex={0}
+                          onKeyDown={(e) => {
+                            if (e.key === "Enter" || e.key === " ") {
+                              e.preventDefault();
+                              handleNotificationClick(notif);
+                            }
                           }}
                         >
-                          <span>
-                            Factura:{" "}
-                            {purchase.invoice_number ||
-                              String(purchase.id).slice(0, 8)}
-                          </span>
-                          <span style={{ color: "#2563eb" }}>
-                            Q {Number(purchase.total_cost || 0).toFixed(2)}
-                          </span>
-                        </div>
-                        <div style={{ color: "#64748b", marginTop: "0.15rem" }}>
-                          Sucursal: {purchase.branch_name || "N/A"}
-                        </div>
-                        <div style={{ color: "#64748b" }}>
-                          Proveedor: {purchase.supplier_name || "N/A"}
-                        </div>
-                      </div>
-                    ))
+                          <div className="notifications-dropdown__item-icon">
+                            {getNotificationIcon(notif.notification_type)}
+                          </div>
+
+                          <div className="notifications-dropdown__item-content">
+                            <div className="notifications-dropdown__item-top">
+                              <span className="notifications-dropdown__item-title">
+                                {notif.title}
+                              </span>
+                              {!notif.is_read && (
+                                <span
+                                  className="notifications-dropdown__item-dot"
+                                  title="No leída"
+                                  aria-label="No leída"
+                                />
+                              )}
+                            </div>
+
+                            <p
+                              className="notifications-dropdown__item-message"
+                              title={notif.message}
+                            >
+                              {notif.message}
+                            </p>
+
+                            <div className="notifications-dropdown__item-footer">
+                              <span className="notifications-dropdown__item-date">
+                                {formatNotificationDate(notif.created_at)}
+                              </span>
+                              {notif.branch_name && (
+                                <span className="notifications-dropdown__item-branch">
+                                  {notif.branch_name}
+                                </span>
+                              )}
+                            </div>
+                          </div>
+                        </li>
+                      ))}
+                    </ul>
                   )}
-                  <Button
-                    variant="primary"
-                    onClick={() => {
-                      setShowNotifications(false);
-                      navigate("/purchases");
-                    }}
-                    style={{
-                      width: "100%",
-                      marginTop: "0.75rem",
-                      padding: "0.5rem",
-                      fontSize: "0.85rem",
-                    }}
-                  >
-                    Ir a Compras
-                  </Button>
                 </div>
               </div>
             )}
@@ -218,6 +383,7 @@ export function AppHeader({ isMobileOpen, setIsMobileOpen }) {
           <strong>{fullName}</strong>
           <small>{ROLE_LABELS[user?.role] || user?.role || "Sin rol"}</small>
         </div>
+
         <Button variant="secondary" onClick={handleLogout}>
           Cerrar sesión
         </Button>
