@@ -17,16 +17,11 @@ import {
   listSales,
   openCashRegister,
 } from "../../pos/api/salesApi";
-import {
-  getInventoryReport,
-  getPurchasesReport,
-  getSalesReport,
-} from "../../reports/api/reportsApi";
 
 import { unwrap } from "../components/DashboardCommon";
-import AdminDashboardView from "../components/AdminDashboardView";
 import CashierDashboardView from "../components/CashierDashboardView";
 import PurchasesDashboardView from "../components/PurchasesDashboardView";
+import DashboardPage from "../../dashboard/pages/DashboardPage";
 
 export function HomePage() {
   const { user } = useAuth();
@@ -49,41 +44,20 @@ export function HomePage() {
   useEffect(() => {
     let isActive = true;
 
+    // Para el rol Admin, DashboardPage gestiona su propia carga optimizada vía /api/dashboard/summary/
+    if (role === APP_ROLES.ADMIN) {
+      setIsLoading(false);
+      return () => {
+        isActive = false;
+      };
+    }
+
     async function loadDashboard() {
       setIsLoading(true);
       setError("");
 
       try {
         const requests = [];
-
-        if (role === APP_ROLES.ADMIN) {
-          requests.push(
-            getSalesReport().then((value) => ["salesReport", value]),
-            getPurchasesReport().then((value) => ["purchasesReport", value]),
-            getInventoryReport().then((value) => ["inventoryReport", value]),
-            listSales().then((value) => ["sales", unwrap(value)]),
-            listPurchases().then((value) => [
-              "purchases",
-              unwrapPurchaseResults(value),
-            ]),
-            listSuppliers().then((value) => [
-              "suppliers",
-              unwrapPurchaseResults(value),
-            ]),
-            listStocks({ low: "true", page_size: 8 }).then((value) => [
-              "lowStock",
-              unwrapInventoryResults(value),
-            ]),
-          );
-          if (user?.branch) {
-            requests.push(
-              getCurrentCashRegister().then((value) => [
-                "cashRegisterSession",
-                value.session,
-              ]),
-            );
-          }
-        }
 
         if (role === APP_ROLES.PURCHASES) {
           const stockParams = user?.branch
@@ -187,6 +161,11 @@ export function HomePage() {
     return "Dashboard administrativo";
   }, [role]);
 
+  // Si el usuario es Administrador/Gerente, renderizamos la vista rediseñada de alto nivel
+  if (role === APP_ROLES.ADMIN) {
+    return <DashboardPage />;
+  }
+
   return (
     <div className="dashboard-page">
       <header className="dashboard-page__header">
@@ -202,15 +181,6 @@ export function HomePage() {
       ) : null}
       {error ? <div className="alert alert--error">{error}</div> : null}
 
-      {!isLoading && !error && role === APP_ROLES.ADMIN ? (
-        <AdminDashboardView
-          data={data}
-          isCashRegisterBusy={isCashRegisterBusy}
-          onCloseCashRegister={handleCloseCashRegister}
-          onOpenCashRegister={handleOpenCashRegister}
-          user={user}
-        />
-      ) : null}
       {!isLoading && !error && role === APP_ROLES.PURCHASES ? (
         <PurchasesDashboardView data={data} />
       ) : null}
@@ -226,3 +196,5 @@ export function HomePage() {
     </div>
   );
 }
+
+export default HomePage;
