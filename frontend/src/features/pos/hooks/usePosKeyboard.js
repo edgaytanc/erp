@@ -7,6 +7,7 @@ export function usePosKeyboard({
   onSearchFocus,
   onNavigateResults,
   onAddSelectedProduct,
+  onEnter,
 }) {
   useEffect(() => {
     if (!enabled) {
@@ -14,39 +15,40 @@ export function usePosKeyboard({
     }
 
     function handleKeyDown(event) {
-      // 1. F2: Focus Search Input
+      // 1. F2: Enfoque al input de búsqueda
       if (event.key === "F2") {
         event.preventDefault();
         onSearchFocus?.();
         return;
       }
 
-      // 2. F4 or F9: Confirm / Cobrar
+      // 2. F4 o F9: Confirmar / Cobrar
       if (event.key === "F4" || event.key === "F9") {
         event.preventDefault();
         onConfirm?.();
         return;
       }
 
-      // 3. Escape: Cancel / Clear
+      // 3. Escape: Cancelar modal / Limpiar
       if (event.key === "Escape") {
         event.preventDefault();
         onCancel?.();
         return;
       }
 
-      // Check if a modal is open. If so, do not hijack global Arrows or Enter.
+      // Si un modal está abierto, no secuestrar flechas ni Enter globales
       const isModalOpen =
         document.querySelector(".pos-modal-backdrop") !== null;
       if (isModalOpen) {
         return;
       }
 
-      // Also, if the active element is an input (e.g. quantity input),
-      // we don't want to hijack ArrowUp/ArrowDown or Enter.
-      // Exception: the search input itself.
+      // Si el elemento activo es un input que NO sea el de búsqueda (ej. cantidad),
+      // no interceptar flechas ni Enter.
       const activeEl = document.activeElement;
-      const isInput = activeEl && activeEl.tagName === "INPUT";
+      const isInput =
+        activeEl &&
+        (activeEl.tagName === "INPUT" || activeEl.tagName === "TEXTAREA");
       const isSearchInput =
         activeEl && activeEl.classList.contains("search-input");
 
@@ -54,17 +56,21 @@ export function usePosKeyboard({
         return;
       }
 
-      // 4. ArrowUp / ArrowDown: Navigate Results
+      // 4. ArrowUp / ArrowDown: Navegar por los resultados
       if (event.key === "ArrowUp" || event.key === "ArrowDown") {
         event.preventDefault();
         onNavigateResults?.(event.key === "ArrowUp" ? "up" : "down");
         return;
       }
 
-      // 5. Enter: Add Selected Product
+      // 5. Enter: Auto-Add / Escáner de código de barras / Selección
       if (event.key === "Enter") {
         event.preventDefault();
-        onAddSelectedProduct?.();
+        if (onEnter) {
+          onEnter();
+        } else if (onAddSelectedProduct) {
+          onAddSelectedProduct();
+        }
       }
     }
 
@@ -77,5 +83,6 @@ export function usePosKeyboard({
     onSearchFocus,
     onNavigateResults,
     onAddSelectedProduct,
+    onEnter,
   ]);
 }

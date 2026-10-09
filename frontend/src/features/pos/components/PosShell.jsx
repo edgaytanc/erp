@@ -33,7 +33,7 @@ export function PosShell({
     contentRef: ticketRef,
   });
 
-  // Automatically trigger printing once sale registration succeeds and DOM finishes rendering
+  // Imprimir automáticamente una vez se confirma la venta y el ticket se renderiza en el DOM
   useEffect(() => {
     const saleId = state.ticketData?.id || state.ticketData?.sale?.id;
     if (
@@ -58,16 +58,24 @@ export function PosShell({
 
   const { focusSearch } = actions;
 
-  // Focus search input on mount
+  // Foco persistente: asegurar que el cursor retorne a searchInputRef
+  // al montar y cada vez que se cierre cualquier modal (cancelar venta, efectivo, recomendaciones)
   useEffect(() => {
-    focusSearch();
-  }, [focusSearch]);
+    if (!isCancelModalOpen && !isCashPaymentModalOpen && !isRecommendModalOpen) {
+      focusSearch();
+    }
+  }, [
+    isCancelModalOpen,
+    isCashPaymentModalOpen,
+    isRecommendModalOpen,
+    focusSearch,
+  ]);
 
-  // Hook for global keyboard shortcuts
+  // Hook global de atajos de teclado y escáner de código de barras
   usePosKeyboard({
     enabled: true,
     onSearchFocus: () => {
-      actions.focusSearch();
+      focusSearch();
     },
     onNavigateResults: (direction) => {
       const len = state.searchResults.length;
@@ -80,11 +88,11 @@ export function PosShell({
       }
       actions.setSelectedResultIndex(nextIndex);
     },
+    onEnter: () => {
+      actions.submitSearch();
+    },
     onAddSelectedProduct: () => {
-      const selectedProduct = state.searchResults[state.selectedResultIndex];
-      if (selectedProduct) {
-        actions.addProduct(selectedProduct);
-      }
+      actions.submitSearch();
     },
     onConfirm: () => {
       if (isCashPaymentModalOpen) return;
@@ -95,12 +103,16 @@ export function PosShell({
     onCancel: () => {
       if (isCashPaymentModalOpen) {
         setIsCashPaymentModalOpen(false);
+        focusSearch();
       } else if (isCancelModalOpen) {
         setIsCancelModalOpen(false);
+        focusSearch();
       } else if (isRecommendModalOpen) {
         setIsRecommendModalOpen(false);
+        focusSearch();
       } else {
         actions.clearSale();
+        focusSearch();
       }
     },
   });
@@ -108,6 +120,7 @@ export function PosShell({
   function handleCancelConfirm(reason) {
     actions.cancelSale(reason);
     setIsCancelModalOpen(false);
+    focusSearch();
   }
 
   function handleConfirmClick() {
@@ -117,11 +130,13 @@ export function PosShell({
     }
 
     actions.confirmSale();
+    focusSearch();
   }
 
   function handleCashPaymentConfirm(paymentDetails) {
     actions.confirmSale(paymentDetails);
     setIsCashPaymentModalOpen(false);
+    focusSearch();
   }
 
   return (
@@ -141,10 +156,10 @@ export function PosShell({
 
       {/* Status Bar */}
       <SaleStatusBar
+        branchName={state.branchName}
         cartCount={state.cartItems.length}
         draftSaleId={state.draftSaleId}
         status={state.syncStatus}
-        branchName={state.branchName}
       />
 
       {/* Cash Status */}
@@ -188,6 +203,7 @@ export function PosShell({
         >
           <CartPanel
             items={state.cartItems}
+            onFocusSearch={focusSearch}
             onRemove={actions.removeItem}
             onUpdateQuantity={actions.updateQuantity}
           />
@@ -220,13 +236,16 @@ export function PosShell({
             paymentMethod={state.paymentMethod}
           />
 
-          <TicketPreview ticket={state.ticketData} ref={ticketRef} />
+          <TicketPreview ref={ticketRef} ticket={state.ticketData} />
 
           <SaleActions
             canCancel={canCancel}
             canConfirm={canConfirm}
             onCancel={() => setIsCancelModalOpen(true)}
-            onClear={actions.clearSale}
+            onClear={() => {
+              actions.clearSale();
+              focusSearch();
+            }}
             onConfirm={handleConfirmClick}
             onPrint={state.ticketData ? handlePrint : null}
           />
@@ -234,21 +253,30 @@ export function PosShell({
       </div>
 
       <CancelSaleModal
-        onClose={() => setIsCancelModalOpen(false)}
+        onClose={() => {
+          setIsCancelModalOpen(false);
+          focusSearch();
+        }}
         onConfirm={handleCancelConfirm}
         open={isCancelModalOpen}
       />
       <CashPaymentModal
-        onClose={() => setIsCashPaymentModalOpen(false)}
+        onClose={() => {
+          setIsCashPaymentModalOpen(false);
+          focusSearch();
+        }}
         onConfirm={handleCashPaymentConfirm}
         open={isCashPaymentModalOpen}
         total={state.serverTotals.total}
       />
       <ProductRecommendationModal
-        isOpen={isRecommendModalOpen}
-        onClose={() => setIsRecommendModalOpen(false)}
         branchId={state.branchId}
+        isOpen={isRecommendModalOpen}
         onAddProduct={actions.addProduct}
+        onClose={() => {
+          setIsRecommendModalOpen(false);
+          focusSearch();
+        }}
       />
     </div>
   );
