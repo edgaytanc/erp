@@ -1,3 +1,4 @@
+// frontend/src/app/router.jsx
 import { createBrowserRouter, Navigate } from "react-router-dom";
 
 import { AuthLayout } from "../layouts/AuthLayout";
@@ -34,7 +35,7 @@ export const router = createBrowserRouter([
           {
             path: "dashboard",
             element: (
-              <RoleRoute allowedRoles={["admin"]}>
+              <RoleRoute allowedRoles={["admin", "purchases"]}>
                 <DashboardPage />
               </RoleRoute>
             ),

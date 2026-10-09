@@ -227,12 +227,20 @@ class DashboardAPITests(TestCase):
         self.branch1 = Branch.objects.create(name="Sucursal Centro", company=self.company)
         self.branch2 = Branch.objects.create(name="Sucursal Sur", company=self.company)
 
-        # Usuario asociado a Branch 1
+        # Usuario asociado a Branch 1 (Admin)
         self.branch_user = User.objects.create_user(
             username="admin_centro",
             password="password123",
             branch=self.branch1,
             role=User.Roles.ADMIN,
+        )
+
+        # Usuario con rol Compras asignado a Branch 1
+        self.purchases_user = User.objects.create_user(
+            username="compras_centro",
+            password="password123",
+            branch=self.branch1,
+            role=User.Roles.PURCHASES,
         )
 
         # Usuario Gerente General / Admin Global (SIN sucursal asignada)
@@ -260,6 +268,7 @@ class DashboardAPITests(TestCase):
         )
 
         # Stock en Branch 1 (Stock bajo para product_a: 5 <= 15)
+        # Valor inventario Branch 1: (5 * 10.00) + (20 * 15.00) = 50.00 + 300.00 = 350.00
         Stock.objects.filter(branch=self.branch1, product=self.product_a).update(
             qty_on_hand=Decimal("5.00"),
             sale_price=Decimal("15.00"),
@@ -335,6 +344,15 @@ class DashboardAPITests(TestCase):
             status=PurchaseStatus.CONFIRMED,
             purchased_at=now,
             total_cost=Decimal("120.00"),
+        )
+
+        # Orden en DRAFT en Branch 1
+        self.draft_purchase = Purchase.objects.create(
+            branch=self.branch1,
+            supplier=self.supplier,
+            invoice_number="DRAFT-B1-01",
+            status=PurchaseStatus.DRAFT,
+            total_cost=Decimal("45.00"),
         )
 
     def test_dashboard_summary_scoped_to_user_branch(self):
@@ -414,3 +432,63 @@ class DashboardAPITests(TestCase):
         branch_ids_in_activity = {item["branch_id"] for item in data["recent_activity"]}
         self.assertIn(str(self.branch1.id), branch_ids_in_activity)
         self.assertIn(str(self.branch2.id), branch_ids_in_activity)
+
+    def test_purchasing_dashboard_summary_endpoint(self):
+        """Verifica el endpoint específico /api/dashboard/purchasing-summary/ para rol compras."""
+        self.client.force_authenticate(user=self.purchases_user)
+        response = self.client.get("/api/dashboard/purchasing-summary/")
+
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        data = response.data
+
+        # Scope
+        self.assertEqual(data["scope"]["branch_id"], str(self.branch1.id))
+        self.assertEqual(data["scope"]["branch_name"], "Sucursal Centro")
+
+        # KPIs requeridos para compras:
+        # 1. Total gastado en compras mes actual (80.00)
+        self.assertEqual(data["kpis"]["total_purchases"], 80.00)
+        # 2. Órdenes en estado DRAFT (1 orden)
+        self.assertEqual(data["kpis"]["draft_orders_count"], 1)
+        # 3. Stock crítico (product_a: 5 <= 15)
+        self.assertEqual(data["kpis"]["low_stock_count"], 1)
+        # 4. Valor total inventario sucursal (5*10 + 20*15 = 350.00)
+        self.assertEqual(data["kpis"]["total_inventory_value"], 350.00)
+
+        # NO debe contener información de ventas ni utilidades ni caja POS
+        self.assertNotIn("total_sales", data["kpis"])
+        self.assertNotIn("estimated_gross_profit", data["kpis"])
+        self.assertNotIn("cash_register_session", data)
+
+        # Gráfico de 7 días: solo gasto diario en compras, sin campo 'sales'
+        self.assertEqual(len(data["chart_data"]), 7)
+        matching_point = next(p for p in data["chart_data"] if p["purchases"] > 0)
+        self.assertEqual(matching_point["purchases"], 80.00)
+        self.assertNotIn("sales", matching_point)
+
+        # Alertas de stock crítico de la sucursal
+        self.assertEqual(len(data["alerts"]), 1)
+        self.assertEqual(data["alerts"][0]["product_name"], "Arroz Especial 1kg")
+        self.assertEqual(data["alerts"][0]["branch_id"], str(self.branch1.id))
+
+        # Actividad reciente: órdenes de compra (confirmadas y draft) de la sucursal
+        self.assertEqual(len(data["recent_activity"]), 2)
+        self.assertTrue(all(item["type"] == "PURCHASE" for item in data["recent_activity"]))
+        self.assertTrue(all(item["branch_id"] == str(self.branch1.id) for item in data["recent_activity"]))
+
+    def test_purchasing_user_delegation_in_summary_endpoint(self):
+        """Un usuario con rol 'purchases' que acceda a /api/dashboard/summary/ recibe solo datos de compras."""
+        self.client.force_authenticate(user=self.purchases_user)
+        response = self.client.get("/api/dashboard/summary/")
+
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        data = response.data
+
+        # No debe haber ventas ni utilidades
+        self.assertNotIn("total_sales", data["kpis"])
+        self.assertNotIn("estimated_gross_profit", data["kpis"])
+        self.assertNotIn("cash_register_session", data)
+        # Debe contener KPIs de compras
+        self.assertEqual(data["kpis"]["total_purchases"], 80.00)
+        self.assertEqual(data["kpis"]["draft_orders_count"], 1)
+        self.assertEqual(data["kpis"]["total_inventory_value"], 350.00)

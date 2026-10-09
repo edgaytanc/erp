@@ -4,8 +4,11 @@ import { Link, useNavigate } from "react-router-dom";
 import {
   AlertTriangle,
   ArrowRight,
+  Boxes,
   Building2,
   DollarSign,
+  FileText,
+  Lock,
   Monitor,
   Package,
   Plus,
@@ -13,17 +16,20 @@ import {
   ShoppingCart,
   TrendingUp,
   Unlock,
-  Lock,
 } from "lucide-react";
 
 import { useAuth } from "../../../contexts/AuthContext";
 import { extractApiErrorMessage } from "../../../lib/apiError";
+import { APP_ROLES } from "../../auth/constants/roles";
 import {
   closeCashRegister,
   getCurrentCashRegister,
   openCashRegister,
 } from "../../pos/api/salesApi";
-import { getDashboardSummary } from "../api/dashboardApi";
+import {
+  getDashboardSummary,
+  getPurchasingDashboardSummary,
+} from "../api/dashboardApi";
 
 const currencyFormatter = new Intl.NumberFormat("es-GT", {
   style: "currency",
@@ -121,7 +127,13 @@ function CashRegisterModal({
         </label>
 
         {isClosing ? (
-          <small style={{ display: "block", marginTop: "0.5rem", color: "#64748b" }}>
+          <small
+            style={{
+              display: "block",
+              marginTop: "0.5rem",
+              color: "#64748b",
+            }}
+          >
             Efectivo esperado según ventas: {formatCurrency(suggestedAmount)}
           </small>
         ) : null}
@@ -132,7 +144,11 @@ function CashRegisterModal({
             disabled={isBusy}
             type="submit"
           >
-            {isBusy ? "Procesando..." : isClosing ? "Confirmar Cierre" : "Confirmar Apertura"}
+            {isBusy
+              ? "Procesando..."
+              : isClosing
+                ? "Confirmar Cierre"
+                : "Confirmar Apertura"}
           </button>
           <button
             className="btn btn--secondary"
@@ -169,7 +185,9 @@ function DualLineChart({ data = [] }) {
   const chartHeight = height - paddingTop - paddingBottom;
 
   const maxVal = Math.max(
-    ...data.map((d) => Math.max(Number(d.sales || 0), Number(d.purchases || 0))),
+    ...data.map((d) =>
+      Math.max(Number(d.sales || 0), Number(d.purchases || 0)),
+    ),
     100,
   );
 
@@ -195,10 +213,14 @@ function DualLineChart({ data = [] }) {
     .join(" ");
 
   const baseY = paddingTop + chartHeight;
-  const salesAreaPoints = `${paddingX},${baseY} ${salesLinePoints} ${paddingX + (data.length - 1) * stepX},${baseY}`;
+  const salesAreaPoints = `${paddingX},${baseY} ${salesLinePoints} ${
+    paddingX + (data.length - 1) * stepX
+  },${baseY}`;
 
-  // Cálculo de totales de los 7 días para el resumen en cabecera
-  const totalSales7d = data.reduce((acc, curr) => acc + Number(curr.sales || 0), 0);
+  const totalSales7d = data.reduce(
+    (acc, curr) => acc + Number(curr.sales || 0),
+    0,
+  );
   const totalPurchases7d = data.reduce(
     (acc, curr) => acc + Number(curr.purchases || 0),
     0,
@@ -221,7 +243,9 @@ function DualLineChart({ data = [] }) {
         </div>
         {activePoint ? (
           <div className="dashboard-chart-tooltip-badge">
-            <strong>{activePoint.label} ({activePoint.day_formatted}):</strong>{" "}
+            <strong>
+              {activePoint.label} ({activePoint.day_formatted}):
+            </strong>{" "}
             <span style={{ color: "#2563eb", fontWeight: 700 }}>
               Ventas {formatCurrency(activePoint.sales)}
             </span>{" "}
@@ -231,7 +255,9 @@ function DualLineChart({ data = [] }) {
             </span>
           </div>
         ) : (
-          <span className="dashboard-chart-hint">Pasa el cursor por los puntos para ver detalles</span>
+          <span className="dashboard-chart-hint">
+            Pasa el cursor por los puntos para ver detalles
+          </span>
         )}
       </div>
 
@@ -241,7 +267,6 @@ function DualLineChart({ data = [] }) {
           role="img"
           aria-label="Gráfica de Ventas vs Compras de los últimos 7 días"
         >
-          {/* Líneas de cuadrícula horizontal */}
           {[0, 0.25, 0.5, 0.75, 1].map((ratio) => {
             const y = paddingTop + chartHeight * (1 - ratio);
             return (
@@ -258,25 +283,21 @@ function DualLineChart({ data = [] }) {
             );
           })}
 
-          {/* Área coloreada bajo la curva de ventas */}
           <polygon
             points={salesAreaPoints}
             className="dashboard-chart__area dashboard-chart__area--sales"
           />
 
-          {/* Línea de compras (Verde/Esmeralda) */}
           <polyline
             points={purchasesLinePoints}
             className="dashboard-chart__line dashboard-chart__line--purchases"
           />
 
-          {/* Línea de ventas (Azul corporativo) */}
           <polyline
             points={salesLinePoints}
             className="dashboard-chart__line dashboard-chart__line--sales"
           />
 
-          {/* Puntos de compras */}
           {purchasesCoords.map((coord, idx) => (
             <circle
               key={`purch-${idx}`}
@@ -289,7 +310,6 @@ function DualLineChart({ data = [] }) {
             />
           ))}
 
-          {/* Puntos de ventas */}
           {salesCoords.map((coord, idx) => (
             <circle
               key={`sale-${idx}`}
@@ -303,12 +323,156 @@ function DualLineChart({ data = [] }) {
           ))}
         </svg>
 
-        {/* Etiquetas del eje X */}
         <div className="dashboard-chart__labels">
           {data.map((point, idx) => (
             <div
               key={point.date || idx}
-              className={`dashboard-chart-label-col ${hoveredIndex === idx ? "dashboard-chart-label-col--active" : ""}`}
+              className={`dashboard-chart-label-col ${
+                hoveredIndex === idx ? "dashboard-chart-label-col--active" : ""
+              }`}
+              onMouseEnter={() => setHoveredIndex(idx)}
+              onMouseLeave={() => setHoveredIndex(null)}
+            >
+              <span>{point.label}</span>
+              <small>{point.day_formatted}</small>
+            </div>
+          ))}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function PurchasesLineChart({ data = [] }) {
+  const [hoveredIndex, setHoveredIndex] = useState(null);
+
+  if (!data || data.length === 0) {
+    return (
+      <div className="dashboard-empty">
+        No hay datos suficientes para graficar las compras de los últimos 7 días.
+      </div>
+    );
+  }
+
+  const width = 760;
+  const height = 230;
+  const paddingX = 42;
+  const paddingTop = 28;
+  const paddingBottom = 42;
+
+  const chartWidth = width - paddingX * 2;
+  const chartHeight = height - paddingTop - paddingBottom;
+
+  const maxVal = Math.max(
+    ...data.map((d) => Number(d.purchases || 0)),
+    100,
+  );
+
+  const stepX = chartWidth / Math.max(data.length - 1, 1);
+
+  const purchasesCoords = data.map((point, index) => {
+    const x = paddingX + index * stepX;
+    const y =
+      paddingTop +
+      chartHeight -
+      (Number(point.purchases || 0) / maxVal) * chartHeight;
+    return { x, y, value: point.purchases };
+  });
+
+  const purchasesLinePoints = purchasesCoords
+    .map((c) => `${c.x},${c.y}`)
+    .join(" ");
+
+  const baseY = paddingTop + chartHeight;
+  const purchasesAreaPoints = `${paddingX},${baseY} ${purchasesLinePoints} ${
+    paddingX + (data.length - 1) * stepX
+  },${baseY}`;
+
+  const totalPurchases7d = data.reduce(
+    (acc, curr) => acc + Number(curr.purchases || 0),
+    0,
+  );
+
+  const activePoint = hoveredIndex !== null ? data[hoveredIndex] : null;
+
+  return (
+    <div className="dashboard-chart-container">
+      <div className="dashboard-chart-header">
+        <div className="dashboard-chart-legend">
+          <div className="dashboard-chart-legend-item">
+            <span className="dashboard-chart-legend-dot dashboard-chart-legend-dot--purchases" />
+            <span>Gasto en compras 7 días ({formatCurrency(totalPurchases7d)})</span>
+          </div>
+        </div>
+        {activePoint ? (
+          <div className="dashboard-chart-tooltip-badge">
+            <strong>
+              {activePoint.label} ({activePoint.day_formatted}):
+            </strong>{" "}
+            <span style={{ color: "#10b981", fontWeight: 700 }}>
+              Compras {formatCurrency(activePoint.purchases)}
+            </span>
+          </div>
+        ) : (
+          <span className="dashboard-chart-hint">
+            Pasa el cursor por los puntos para ver el gasto diario
+          </span>
+        )}
+      </div>
+
+      <div className="dashboard-chart">
+        <svg
+          viewBox={`0 0 ${width} ${height}`}
+          role="img"
+          aria-label="Gráfica de gasto diario en compras de los últimos 7 días"
+        >
+          {[0, 0.25, 0.5, 0.75, 1].map((ratio) => {
+            const y = paddingTop + chartHeight * (1 - ratio);
+            return (
+              <line
+                key={ratio}
+                x1={paddingX}
+                y1={y}
+                x2={width - paddingX}
+                y2={y}
+                stroke="#e2e8f0"
+                strokeDasharray="4 4"
+                strokeWidth="1"
+              />
+            );
+          })}
+
+          <polygon
+            points={purchasesAreaPoints}
+            className="dashboard-chart__area"
+            style={{ fill: "rgba(16, 185, 129, 0.12)" }}
+          />
+
+          <polyline
+            points={purchasesLinePoints}
+            className="dashboard-chart__line dashboard-chart__line--purchases"
+          />
+
+          {purchasesCoords.map((coord, idx) => (
+            <circle
+              key={`purch-${idx}`}
+              cx={coord.x}
+              cy={coord.y}
+              r={hoveredIndex === idx ? "7" : "5"}
+              className="dashboard-chart__dot dashboard-chart__dot--purchases"
+              onMouseEnter={() => setHoveredIndex(idx)}
+              onMouseLeave={() => setHoveredIndex(null)}
+            />
+          ))}
+        </svg>
+
+        <div className="dashboard-chart__labels">
+          {data.map((point, idx) => (
+            <div
+              key={point.date || idx}
+              className={`dashboard-chart-label-col ${
+                hoveredIndex === idx ? "dashboard-chart-label-col--active" : ""
+              }`}
               onMouseEnter={() => setHoveredIndex(idx)}
               onMouseLeave={() => setHoveredIndex(null)}
             >
@@ -326,6 +490,9 @@ export function DashboardPage() {
   const { user } = useAuth();
   const navigate = useNavigate();
 
+  const isPurchasingRole =
+    user?.role === APP_ROLES.PURCHASES || user?.role === "purchasing";
+
   const [dashboardData, setDashboardData] = useState(null);
   const [cashSession, setCashSession] = useState(null);
   const [cashModalMode, setCashModalMode] = useState(null);
@@ -336,41 +503,51 @@ export function DashboardPage() {
   const [error, setError] = useState("");
   const [isRefreshing, setIsRefreshing] = useState(false);
 
-  const fetchSummary = useCallback(async (showRefreshing = false) => {
-    if (showRefreshing) setIsRefreshing(true);
-    else setIsLoading(true);
+  const fetchSummary = useCallback(
+    async (showRefreshing = false) => {
+      if (showRefreshing) setIsRefreshing(true);
+      else setIsLoading(true);
 
-    setError("");
-    try {
-      const result = await getDashboardSummary();
-      setDashboardData(result);
+      setError("");
+      try {
+        const fetcher = isPurchasingRole
+          ? getPurchasingDashboardSummary
+          : getDashboardSummary;
+        const result = await fetcher();
+        setDashboardData(result);
 
-      if (result.cash_register_session !== undefined) {
-        setCashSession(result.cash_register_session);
-      } else if (user?.branch) {
-        try {
-          const cashRes = await getCurrentCashRegister();
-          setCashSession(cashRes.session);
-        } catch {
-          // Si falla la consulta de caja secundaria, se mantiene silencioso
+        // Control de caja POS solo relevante para administradores de sucursal
+        if (!isPurchasingRole) {
+          if (result.cash_register_session !== undefined) {
+            setCashSession(result.cash_register_session);
+          } else if (user?.branch) {
+            try {
+              const cashRes = await getCurrentCashRegister();
+              setCashSession(cashRes.session);
+            } catch {
+              // Silencioso ante fallas secundarias de consulta de turno
+            }
+          }
         }
+      } catch (err) {
+        setError(
+          err?.response?.data?.detail ||
+            (isPurchasingRole
+              ? "No fue posible cargar el resumen del dashboard de compras."
+              : "No fue posible cargar el resumen del dashboard administrativo."),
+        );
+      } finally {
+        setIsLoading(false);
+        setIsRefreshing(false);
       }
-    } catch (err) {
-      setError(
-        err?.response?.data?.detail ||
-          "No fue posible cargar el resumen del dashboard administrativo.",
-      );
-    } finally {
-      setIsLoading(false);
-      setIsRefreshing(false);
-    }
-  }, [user?.branch]);
+    },
+    [isPurchasingRole, user?.branch],
+  );
 
   useEffect(() => {
     fetchSummary();
   }, [fetchSummary]);
 
-  // Manejadores para abrir y cerrar caja
   async function handleCashSubmit(amount) {
     setIsCashBusy(true);
     setCashError("");
@@ -409,6 +586,9 @@ export function DashboardPage() {
     estimated_gross_profit: 0,
     profit_margin: 0,
     low_stock_count: 0,
+    critical_stock_count: 0,
+    draft_orders_count: 0,
+    total_inventory_value: 0,
     out_of_stock_count: 0,
   };
 
@@ -420,21 +600,34 @@ export function DashboardPage() {
   const branchLabel =
     scope?.branch_name ||
     user?.branch_name ||
-    "Todas las sucursales (Consolidado Global)";
+    (isPurchasingRole
+      ? "Sucursal del usuario"
+      : "Todas las sucursales (Consolidado Global)");
 
   const isCashOpen = cashSession?.status === "OPEN";
   const expectedCash = Number(cashSession?.expected_cash || 0);
 
   return (
     <div className="dashboard-page">
-      {/* Encabezado del Dashboard Gerencial */}
+      {/* Encabezado del Dashboard adaptado por rol */}
       <header className="dashboard-page__header">
         <div>
-          <p>Panel de Control Gerencial</p>
-          <h1>Dashboard Administrativo</h1>
+          <p>
+            {isPurchasingRole
+              ? "Gestión de Abastecimiento e Inventario"
+              : "Panel de Control Gerencial"}
+          </p>
+          <h1>
+            {isPurchasingRole
+              ? "Dashboard de Compras"
+              : "Dashboard Administrativo"}
+          </h1>
         </div>
         <div className="dashboard-header-right">
-          <div className="dashboard-scope-badge" title="Alcance de los datos mostrados">
+          <div
+            className="dashboard-scope-badge"
+            title="Alcance de los datos mostrados"
+          >
             <Building2 size={16} />
             <span>{branchLabel}</span>
           </div>
@@ -457,13 +650,27 @@ export function DashboardPage() {
       {/* Manejo de estados de carga y error */}
       {isLoading ? (
         <div className="dashboard-loading">
-          <div className="loading-screen__spinner" style={{ margin: "0 auto 1rem" }} />
-          <p>Cargando información gerencial del dashboard...</p>
+          <div
+            className="loading-screen__spinner"
+            style={{ margin: "0 auto 1rem" }}
+          />
+          <p>
+            {isPurchasingRole
+              ? "Cargando métricas de compras e inventario..."
+              : "Cargando información gerencial del dashboard..."}
+          </p>
         </div>
       ) : null}
 
       {error ? (
-        <div className="alert alert--error" style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+        <div
+          className="alert alert--error"
+          style={{
+            display: "flex",
+            justifyContent: "space-between",
+            alignItems: "center",
+          }}
+        >
           <div>
             <strong>Error al cargar dashboard:</strong> {error}
           </div>
@@ -477,10 +684,289 @@ export function DashboardPage() {
         </div>
       ) : null}
 
-      {!isLoading && !error && (
+      {!isLoading && !error && isPurchasingRole && (
         <div className="dashboard animate-fade-in">
           {/* ==============================================================
-              SECCIÓN HERO: CONTROL DE CAJA POS (DISPONIBLE PARA ADMINISTRADORES DE SUCURSAL)
+              SECCIÓN HERO CON CALL TO ACTION (CTA) PARA ROL DE COMPRAS
+              ============================================================== */}
+          <section className="dashboard-pos-hero" style={{ marginBottom: "0.5rem" }}>
+            <div>
+              <p>Sucursal: {branchLabel}</p>
+              <h1>Módulo de Abastecimiento</h1>
+              <span>Control de órdenes de compra, proveedores e inventario crítico</span>
+              <small>
+                Gestiona tus pedidos a proveedores y monitorea los niveles de existencias para reabastecer oportunamente.
+              </small>
+            </div>
+
+            <div className="dashboard-pos-actions">
+              <Link
+                to="/app/purchases"
+                className="dashboard-big-action"
+                title="Registrar una nueva orden de compra"
+              >
+                <Plus size={22} style={{ marginBottom: "0.2rem" }} />
+                <strong>Nueva Orden de Compra</strong>
+                <span>Registrar pedido a proveedor</span>
+              </Link>
+              <Link
+                to="/app/inventory"
+                className="dashboard-big-action dashboard-big-action--muted"
+                title="Consultar catálogo de inventario y existencias"
+              >
+                <Package size={22} style={{ marginBottom: "0.2rem" }} />
+                <strong>Consultar Inventario</strong>
+                <span>Ver existencias en sucursal</span>
+              </Link>
+            </div>
+          </section>
+
+          {/* ==============================================================
+              1. SECCIÓN DE KPIS PARA COMPRAS (4 TARJETAS CLICKEABLES)
+              ============================================================== */}
+          <section className="dashboard-kpis" aria-label="KPIs de Compras e Inventario">
+            {/* KPI 1: Gastos del Mes */}
+            <Link
+              to="/app/purchases"
+              className="dashboard-kpi dashboard-kpi--link dashboard-kpi--blue"
+              title="Clic para ir al módulo de Compras"
+            >
+              <div className="dashboard-kpi__icon" aria-hidden="true">
+                <ShoppingCart size={24} />
+              </div>
+              <div className="dashboard-kpi__content">
+                <p>Gastos del Mes (Compras)</p>
+                <strong>{formatCurrency(kpis.total_purchases)}</strong>
+                <span>{formatNumber(kpis.purchases_count)} compras confirmadas</span>
+              </div>
+              <div className="dashboard-kpi__arrow">
+                <ArrowRight size={18} />
+              </div>
+            </Link>
+
+            {/* KPI 2: Órdenes Pendientes (Estado DRAFT) */}
+            <Link
+              to="/app/purchases"
+              className="dashboard-kpi dashboard-kpi--link dashboard-kpi--amber"
+              title="Clic para gestionar órdenes de compra pendientes"
+            >
+              <div className="dashboard-kpi__icon" aria-hidden="true">
+                <FileText size={24} />
+              </div>
+              <div className="dashboard-kpi__content">
+                <p>Órdenes Pendientes</p>
+                <strong>{formatNumber(kpis.draft_orders_count)} borradores</strong>
+                <span>Órdenes en estado DRAFT</span>
+              </div>
+              <div className="dashboard-kpi__arrow">
+                <ArrowRight size={18} />
+              </div>
+            </Link>
+
+            {/* KPI 3: Alertas de Stock Crítico */}
+            <Link
+              to="/app/inventory"
+              className={`dashboard-kpi dashboard-kpi--link ${
+                kpis.out_of_stock_count > 0
+                  ? "dashboard-kpi--red"
+                  : "dashboard-kpi--amber"
+              }`}
+              title="Clic para ver productos con stock crítico en Inventario"
+            >
+              <div className="dashboard-kpi__icon" aria-hidden="true">
+                <AlertTriangle size={24} />
+              </div>
+              <div className="dashboard-kpi__content">
+                <p>Alertas de Stock</p>
+                <strong>{formatNumber(kpis.low_stock_count ?? kpis.critical_stock_count)} alertas</strong>
+                <span>
+                  {kpis.out_of_stock_count > 0
+                    ? `${formatNumber(kpis.out_of_stock_count)} productos agotados (0)`
+                    : "En o debajo del mínimo"}
+                </span>
+              </div>
+              <div className="dashboard-kpi__arrow">
+                <ArrowRight size={18} />
+              </div>
+            </Link>
+
+            {/* KPI 4: Valor de Inventario */}
+            <Link
+              to="/app/inventory"
+              className="dashboard-kpi dashboard-kpi--link dashboard-kpi--green"
+              title="Clic para revisar el valor y catálogo del inventario"
+            >
+              <div className="dashboard-kpi__icon" aria-hidden="true">
+                <Boxes size={24} />
+              </div>
+              <div className="dashboard-kpi__content">
+                <p>Valor de Inventario</p>
+                <strong>{formatCurrency(kpis.total_inventory_value ?? kpis.inventory_value)}</strong>
+                <span>Costo total en existencias</span>
+              </div>
+              <div className="dashboard-kpi__arrow">
+                <ArrowRight size={18} />
+              </div>
+            </Link>
+          </section>
+
+          {/* ==============================================================
+              2. SECCIÓN DE GRÁFICO (ÚNICAMENTE GASTO EN COMPRAS ÚLTIMOS 7 DÍAS)
+              ============================================================== */}
+          <section className="dashboard-panel">
+            <header className="dashboard-panel__header">
+              <div>
+                <h2>Compras Diarias (Últimos 7 Días)</h2>
+                <p>
+                  Evolución del gasto diario en órdenes de compra confirmadas en la sucursal
+                </p>
+              </div>
+              <div className="dashboard-panel__actions">
+                <Link
+                  to="/app/purchases"
+                  className="dashboard-inline-action"
+                  title="Ver órdenes de compra"
+                >
+                  <span>Ver todas las compras</span>
+                  <ArrowRight size={14} style={{ marginLeft: "4px" }} />
+                </Link>
+              </div>
+            </header>
+
+            <PurchasesLineChart data={chartData} />
+          </section>
+
+          {/* ==============================================================
+              3. PANEL DIVIDIDO INFERIOR (ALERTAS A LA IZQ, ACTIVIDAD A LA DER)
+              ============================================================== */}
+          <div className="dashboard-columns">
+            {/* Columna Izquierda: Alertas de Inventario Crítico */}
+            <section className="dashboard-panel">
+              <header className="dashboard-panel__header">
+                <div>
+                  <h2>Alertas de Inventario Crítico</h2>
+                  <p>Productos con stock en 0 o por debajo del mínimo</p>
+                </div>
+                <div className="dashboard-panel__actions">
+                  <Link
+                    to="/app/inventory"
+                    className="btn btn--secondary btn--sm dashboard-link-button"
+                  >
+                    <span>Ir al inventario</span>
+                    <ArrowRight size={14} style={{ marginLeft: "4px" }} />
+                  </Link>
+                </div>
+              </header>
+
+              {alerts.length === 0 ? (
+                <div className="dashboard-empty">
+                  No hay productos con stock crítico en la sucursal. Los niveles de inventario son óptimos.
+                </div>
+              ) : (
+                <ul className="dashboard-ranked-list">
+                  {alerts.map((item) => (
+                    <li
+                      key={item.id || item.product_id}
+                      className={`dashboard-alert ${
+                        item.is_out_of_stock ? "dashboard-alert--critical" : ""
+                      }`}
+                    >
+                      <div className="dashboard-alert-info">
+                        <strong>{item.product_name}</strong>
+                        <div className="dashboard-alert-meta">
+                          <span>SKU: {item.sku}</span>
+                          {item.barcode ? <span>Código: {item.barcode}</span> : null}
+                        </div>
+                      </div>
+                      <div className="dashboard-alert-values">
+                        <div className="dashboard-alert-badge-wrap">
+                          {item.is_out_of_stock ? (
+                            <span className="badge badge--danger">Agotado (0)</span>
+                          ) : (
+                            <span className="badge badge--warning">
+                              Stock: {formatNumber(item.qty_on_hand)} unid
+                            </span>
+                          )}
+                        </div>
+                        <small>Mín: {formatNumber(item.min_stock)}</small>
+                      </div>
+                    </li>
+                  ))}
+                </ul>
+              )}
+            </section>
+
+            {/* Columna Derecha: Movimientos Recientes de Compras */}
+            <section className="dashboard-panel">
+              <header className="dashboard-panel__header">
+                <div>
+                  <h2>Movimientos Recientes de Compras</h2>
+                  <p>Últimas 5 órdenes de compra registradas en la sucursal</p>
+                </div>
+                <div className="dashboard-panel__actions dashboard-quick-actions">
+                  <Link
+                    to="/app/purchases"
+                    className="btn btn--primary btn--sm dashboard-btn-cta"
+                    title="Crear una nueva orden de compra"
+                  >
+                    <Plus size={14} />
+                    <span>Nueva Orden</span>
+                  </Link>
+                </div>
+              </header>
+
+              {recentActivity.length === 0 ? (
+                <div className="dashboard-empty">
+                  No hay órdenes de compra registradas recientemente en esta sucursal.
+                </div>
+              ) : (
+                <div className="dashboard-activity">
+                  {recentActivity.map((tx) => (
+                    <div
+                      key={`purch-act-${tx.id}`}
+                      className="dashboard-activity-item"
+                    >
+                      <div className="dashboard-activity-main">
+                        <div
+                          className="dashboard-activity-icon dashboard-activity-icon--purchase"
+                          aria-hidden="true"
+                        >
+                          <ShoppingCart size={16} />
+                        </div>
+                        <div>
+                          <strong>{tx.reference}</strong>
+                          <div className="dashboard-activity-details">
+                            <span>{tx.supplier_name || tx.extra_info}</span>
+                          </div>
+                          <small>{formatRelativeTime(tx.timestamp || tx.created_at)}</small>
+                        </div>
+                      </div>
+
+                      <div className="dashboard-activity-side">
+                        <span className="dashboard-activity-amount dashboard-activity-amount--negative">
+                          - {formatCurrency(tx.amount || tx.total_cost)}
+                        </span>
+                        <span
+                          className={`dashboard-status-pill dashboard-status-pill--${String(
+                            tx.status,
+                          ).toLowerCase()}`}
+                        >
+                          {tx.status_display}
+                        </span>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </section>
+          </div>
+        </div>
+      )}
+
+      {!isLoading && !error && !isPurchasingRole && (
+        <div className="dashboard animate-fade-in">
+          {/* ==============================================================
+              SECCIÓN HERO: CONTROL DE CAJA POS (PARA ROL ADMINISTRADOR)
               ============================================================== */}
           {user?.branch ? (
             <section className="dashboard-pos-hero" style={{ marginBottom: "0.5rem" }}>
@@ -489,7 +975,9 @@ export function DashboardPage() {
                 <h1>Turno de Ventas (Control de Caja POS)</h1>
                 <span>
                   {isCashOpen
-                    ? `Caja abierta por ${cashSession.cashier_name || user?.username || "administrador"}`
+                    ? `Caja abierta por ${
+                        cashSession.cashier_name || user?.username || "administrador"
+                      }`
                     : "Caja cerrada"}
                 </span>
                 {isCashOpen ? (
@@ -536,7 +1024,11 @@ export function DashboardPage() {
                 </button>
 
                 {isCashOpen ? (
-                  <Link to="/pos" className="dashboard-big-action" title="Ir al Terminal Punto de Venta">
+                  <Link
+                    to="/pos"
+                    className="dashboard-big-action"
+                    title="Ir al Terminal Punto de Venta"
+                  >
                     <Monitor size={22} style={{ marginBottom: "0.2rem" }} />
                     <strong>Nueva venta</strong>
                     <span>Abrir Ventas POS</span>
@@ -547,7 +1039,7 @@ export function DashboardPage() {
           ) : null}
 
           {/* ==============================================================
-              1. SECCIÓN DE KPIS (TARJETAS SUPERIORES CLICKEABLES)
+              1. SECCIÓN DE KPIS GERENCIALES (ADMIN)
               ============================================================== */}
           <section className="dashboard-kpis" aria-label="KPIs Gerenciales">
             {/* KPI 1: Ventas del Mes */}
@@ -662,7 +1154,7 @@ export function DashboardPage() {
           </section>
 
           {/* ==============================================================
-              3. SECCIÓN INFERIOR (DIVIDIDA EN 2 COLUMNAS)
+              3. SECCIÓN INFERIOR ADMINISTRATIVA (ALERTAS Y ACTIVIDAD)
               ============================================================== */}
           <div className="dashboard-columns">
             {/* Columna 1: Alertas Críticas de Inventario */}
@@ -725,7 +1217,7 @@ export function DashboardPage() {
               )}
             </section>
 
-            {/* Columna 2: Actividad Reciente con Call to Actions */}
+            {/* Columna 2: Actividad Reciente Gerencial */}
             <section className="dashboard-panel">
               <header className="dashboard-panel__header">
                 <div>
@@ -837,19 +1329,21 @@ export function DashboardPage() {
         </div>
       )}
 
-      {/* Modal para Abrir o Cerrar Caja */}
-      <CashRegisterModal
-        error={cashError}
-        isBusy={isCashBusy}
-        mode={cashModalMode}
-        onClose={() => {
-          setCashModalMode(null);
-          setCashError("");
-        }}
-        onSubmit={handleCashSubmit}
-        open={Boolean(cashModalMode)}
-        suggestedAmount={expectedCash}
-      />
+      {/* Modal para Abrir o Cerrar Caja (solo administradores) */}
+      {!isPurchasingRole ? (
+        <CashRegisterModal
+          error={cashError}
+          isBusy={isCashBusy}
+          mode={cashModalMode}
+          onClose={() => {
+            setCashModalMode(null);
+            setCashError("");
+          }}
+          onSubmit={handleCashSubmit}
+          open={Boolean(cashModalMode)}
+          suggestedAmount={expectedCash}
+        />
+      ) : null}
     </div>
   );
 }

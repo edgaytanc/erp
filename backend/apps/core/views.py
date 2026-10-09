@@ -102,6 +102,196 @@ class NotificationViewSet(viewsets.ModelViewSet):
         )
 
 
+class PurchasingDashboardAPIView(APIView):
+    """
+    Endpoint gerencial consolidado para el Dashboard del rol de Compras (Purchasing).
+    Filtra estrictamente por la sucursal del usuario (request.user.branch).
+    No expone datos de ventas, cajas POS ni márgenes/utilidades brutas.
+
+    Retorna:
+      - kpis: Total gastado en compras (mes actual), Cantidad de órdenes en DRAFT,
+              Productos con stock crítico (en o bajo el mínimo), y Valor total de inventario.
+      - chart_data: Serie de los últimos 7 días con el gasto diario en compras.
+      - alerts: Lista de productos de la sucursal con stock en 0 o crítico.
+      - recent_activity: Las últimas 5 órdenes de compra registradas (sin importar el estado).
+    """
+    permission_classes = [IsAuthenticated]
+
+    def get(self, request):
+        user = request.user
+        branch = getattr(user, "branch", None)
+
+        # Si el usuario es administrador global sin sucursal fija, permite opcionalmente filtrar por ?branch=
+        if not branch and getattr(user, "is_admin", lambda: False)():
+            branch_param = request.query_params.get("branch")
+            if branch_param:
+                branch = Branch.objects.filter(id=branch_param).first()
+
+        now = timezone.now()
+        today = now.date()
+        start_of_month = now.replace(day=1, hour=0, minute=0, second=0, microsecond=0)
+
+        # -------------------------------------------------------------
+        # 1. KPIS DE COMPRAS E INVENTARIO
+        # -------------------------------------------------------------
+        # A) Total gastado en compras confirmadas del mes actual
+        purchases_month_qs = Purchase.objects.filter(
+            status=PurchaseStatus.CONFIRMED,
+            purchased_at__gte=start_of_month,
+            purchased_at__lte=now,
+        )
+        if branch:
+            purchases_month_qs = purchases_month_qs.filter(branch=branch)
+
+        purchases_kpi = purchases_month_qs.aggregate(
+            total_purchases=Coalesce(Sum("total_cost"), Value(Decimal("0.00")), output_field=DecimalField()),
+            purchases_count=Count("id"),
+        )
+        total_purchases = purchases_kpi["total_purchases"] or Decimal("0.00")
+        purchases_count = purchases_kpi["purchases_count"] or 0
+
+        # B) Cantidad de órdenes de compra en estado DRAFT (pendientes)
+        draft_orders_qs = Purchase.objects.filter(status=PurchaseStatus.DRAFT)
+        if branch:
+            draft_orders_qs = draft_orders_qs.filter(branch=branch)
+        draft_orders_count = draft_orders_qs.count()
+
+        # C) Productos con stock crítico (en o por debajo del stock mínimo)
+        stock_qs = Stock.objects.filter(product__is_active=True).select_related("product", "branch")
+        if branch:
+            stock_qs = stock_qs.filter(branch=branch)
+
+        low_stock_count = stock_qs.filter(qty_on_hand__lte=F("product__min_stock")).count()
+        out_of_stock_count = stock_qs.filter(qty_on_hand__lte=Decimal("0.00")).count()
+
+        # D) Valor total del inventario de la sucursal (qty_on_hand * product.cost_price)
+        cogs_expr = ExpressionWrapper(
+            F("qty_on_hand") * F("product__cost_price"),
+            output_field=DecimalField(max_digits=18, decimal_places=2),
+        )
+        inventory_val_agg = stock_qs.aggregate(
+            total_inventory_value=Coalesce(Sum(cogs_expr), Value(Decimal("0.00")), output_field=DecimalField())
+        )
+        total_inventory_value = inventory_val_agg["total_inventory_value"] or Decimal("0.00")
+
+        # -------------------------------------------------------------
+        # 2. DATOS DE LOS ÚLTIMOS 7 DÍAS (ÚNICAMENTE GASTO DIARIO EN COMPRAS)
+        # -------------------------------------------------------------
+        days_count = 7
+        start_chart_dt = (now - timedelta(days=days_count - 1)).replace(
+            hour=0, minute=0, second=0, microsecond=0
+        )
+
+        daily_purchases_qs = Purchase.objects.filter(
+            status=PurchaseStatus.CONFIRMED,
+            purchased_at__gte=start_chart_dt,
+            purchased_at__lte=now,
+        )
+        if branch:
+            daily_purchases_qs = daily_purchases_qs.filter(branch=branch)
+
+        purchases_grouped = (
+            daily_purchases_qs.annotate(day=TruncDate("purchased_at"))
+            .values("day")
+            .annotate(daily_total=Coalesce(Sum("total_cost"), Value(Decimal("0.00")), output_field=DecimalField()))
+        )
+        purchases_by_date = {row["day"]: float(row["daily_total"]) for row in purchases_grouped if row["day"]}
+
+        weekday_names = ["Lun", "Mar", "Mié", "Jue", "Vie", "Sáb", "Dom"]
+        chart_data = []
+        for offset in range(days_count - 1, -1, -1):
+            target_date = today - timedelta(days=offset)
+            chart_data.append({
+                "date": target_date.isoformat(),
+                "label": weekday_names[target_date.weekday()],
+                "day_formatted": target_date.strftime("%d/%m"),
+                "purchases": purchases_by_date.get(target_date, 0.0),
+            })
+
+        # -------------------------------------------------------------
+        # 3. ALERTAS CRÍTICAS DE INVENTARIO (TOP 10 STOCK <= MIN_STOCK)
+        # -------------------------------------------------------------
+        alerts_stocks = (
+            stock_qs.filter(qty_on_hand__lte=F("product__min_stock"))
+            .order_by("qty_on_hand", "product__name")[:10]
+        )
+        alerts = [
+            {
+                "id": str(item.id),
+                "product_id": str(item.product_id),
+                "product_name": item.product.name,
+                "sku": item.product.sku,
+                "barcode": item.product.barcode or "",
+                "branch_id": str(item.branch_id),
+                "branch_name": item.branch.name,
+                "qty_on_hand": float(item.qty_on_hand),
+                "min_stock": float(item.product.min_stock),
+                "is_out_of_stock": bool(item.qty_on_hand <= Decimal("0.00")),
+                "shortage": float(max(Decimal("0.00"), item.product.min_stock - item.qty_on_hand)),
+            }
+            for item in alerts_stocks
+        ]
+
+        # -------------------------------------------------------------
+        # 4. ACTIVIDAD RECIENTE (ÚLTIMAS 5 ÓRDENES DE COMPRA SIN IMPORTAR ESTADO)
+        # -------------------------------------------------------------
+        recent_purchases_qs = Purchase.objects.select_related("branch", "supplier").all()
+        if branch:
+            recent_purchases_qs = recent_purchases_qs.filter(branch=branch)
+        recent_purchases = list(recent_purchases_qs.order_by("-created_at")[:5])
+
+        recent_activity = []
+        for purchase in recent_purchases:
+            dt = purchase.purchased_at or purchase.created_at
+            inv = purchase.invoice_number or str(purchase.id)[:8].upper()
+            recent_activity.append({
+                "id": str(purchase.id),
+                "type": "PURCHASE",
+                "type_label": "Compra",
+                "reference": f"Compra #{inv}",
+                "invoice_number": purchase.invoice_number or "",
+                "amount": float(purchase.total_cost),
+                "total_cost": float(purchase.total_cost),
+                "status": purchase.status,
+                "status_display": (
+                    "Confirmada"
+                    if purchase.status == PurchaseStatus.CONFIRMED
+                    else ("Cancelada" if purchase.status == PurchaseStatus.CANCELLED else "Borrador")
+                ),
+                "timestamp": dt.isoformat() if dt else None,
+                "created_at": purchase.created_at.isoformat() if purchase.created_at else None,
+                "branch_id": str(purchase.branch_id),
+                "branch_name": purchase.branch.name,
+                "supplier_id": str(purchase.supplier_id) if purchase.supplier else None,
+                "supplier_name": purchase.supplier.name if purchase.supplier else "Proveedor",
+                "extra_info": purchase.supplier.name if purchase.supplier else "Proveedor",
+            })
+
+        scope = {
+            "branch_id": str(branch.id) if branch else None,
+            "branch_name": branch.name if branch else "Todas las sucursales (Consolidado)",
+            "is_global": branch is None,
+        }
+
+        return Response({
+            "scope": scope,
+            "kpis": {
+                "total_purchases": float(total_purchases),
+                "purchases_count": purchases_count,
+                "draft_orders_count": draft_orders_count,
+                "pending_orders_count": draft_orders_count,
+                "low_stock_count": low_stock_count,
+                "critical_stock_count": low_stock_count,
+                "out_of_stock_count": out_of_stock_count,
+                "total_inventory_value": float(total_inventory_value),
+                "inventory_value": float(total_inventory_value),
+            },
+            "chart_data": chart_data,
+            "alerts": alerts,
+            "recent_activity": recent_activity,
+        })
+
+
 class DashboardAPIView(APIView):
     """
     Endpoint gerencial consolidado para el Dashboard Administrativo.
@@ -114,11 +304,20 @@ class DashboardAPIView(APIView):
     Si el usuario NO tiene sucursal asignada (es decir, es un Admin Global/Gerente General),
     el dashboard consolida y muestra la información de TODAS las sucursales.
     Permite opcionalmente filtrar por ?branch=<id> para gerentes globales.
+
+    Seguridad de Rol:
+    Si el usuario tiene rol 'purchases' (compras), se delega automáticamente al
+    PurchasingDashboardAPIView para no exponer datos confidenciales de ventas, caja POS ni márgenes.
     """
     permission_classes = [IsAuthenticated]
 
     def get(self, request):
         user = request.user
+
+        # Aislamiento por rol: si el usuario es de rol Compras, derivar a PurchasingDashboardAPIView
+        if getattr(user, "role", "") == "purchases" or getattr(user, "is_purchases", lambda: False)():
+            return PurchasingDashboardAPIView().get(request)
+
         branch = getattr(user, "branch", None)
 
         # Si el usuario no tiene sucursal asignada (Admin Global/Gerente General),

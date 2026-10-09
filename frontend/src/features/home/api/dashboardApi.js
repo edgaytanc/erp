@@ -1,2 +1,5 @@
 // frontend/src/features/home/api/dashboardApi.js
-export { getDashboardSummary } from "../../dashboard/api/dashboardApi";
+export {
+  getDashboardSummary,
+  getPurchasingDashboardSummary,
+} from "../../dashboard/api/dashboardApi";
