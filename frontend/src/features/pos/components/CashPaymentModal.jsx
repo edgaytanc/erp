@@ -19,38 +19,10 @@ export function CashPaymentModal({ onClose, onConfirm, open, total }) {
     }
   }, [numericTotal, open]);
 
-  // Generación inteligente de sugerencias rápidas de efectivo
-  const quickCashSuggestions = useMemo(() => {
-    if (!numericTotal) return [];
+  // Denominaciones fijas de pago rápido requeridas: Q 5, Q 10, Q 20, Q 50, Q 100
+  const quickCashDenominations = [5, 10, 20, 50, 100];
 
-    const suggestions = new Set();
-    suggestions.add(numericTotal);
-
-    // Billetes estándar de Quetzales (Q)
-    const commonBills = [10, 20, 50, 100, 200];
-    commonBills.forEach((bill) => {
-      if (bill >= numericTotal) {
-        suggestions.add(bill);
-      }
-    });
-
-    // Múltiplos redondeados hacia arriba
-    const ceil10 = Math.ceil(numericTotal / 10) * 10;
-    if (ceil10 >= numericTotal) suggestions.add(ceil10);
-
-    const ceil50 = Math.ceil(numericTotal / 50) * 50;
-    if (ceil50 >= numericTotal) suggestions.add(ceil50);
-
-    const ceil100 = Math.ceil(numericTotal / 100) * 100;
-    if (ceil100 >= numericTotal) suggestions.add(ceil100);
-
-    return Array.from(suggestions)
-      .map(Number)
-      .sort((a, b) => a - b)
-      .slice(0, 6);
-  }, [numericTotal]);
-
-  // Confirmar mediante teclado (F4 o F9) cuando el modal está abierto y es válido
+  // Confirmar mediante teclado (F4 o F9) o cerrar con Escape
   useEffect(() => {
     if (!open) return undefined;
 
@@ -61,11 +33,15 @@ export function CashPaymentModal({ onClose, onConfirm, open, total }) {
           onConfirm({ cashReceived: numericReceived.toFixed(2) });
         }
       }
+      if (event.key === "Escape") {
+        event.preventDefault();
+        onClose?.();
+      }
     }
 
     window.addEventListener("keydown", handleKeyDown);
     return () => window.removeEventListener("keydown", handleKeyDown);
-  }, [open, isValid, numericReceived, onConfirm]);
+  }, [open, isValid, numericReceived, onConfirm, onClose]);
 
   if (!open) return null;
 
@@ -101,24 +77,32 @@ export function CashPaymentModal({ onClose, onConfirm, open, total }) {
           </label>
 
           {/* Botones de sugerencias de pago rápido */}
-          {quickCashSuggestions.length > 0 && (
-            <div className="quick-cash-container">
-              <span>Accesos rápidos de pago:</span>
-              <div className="quick-cash-grid">
-                {quickCashSuggestions.map((value) => (
-                  <button
-                    key={value}
-                    type="button"
-                    className={`quick-cash-btn ${numericReceived === value ? "active" : ""}`}
-                    onClick={() => setCashReceived(value.toFixed(2))}
-                  >
-                    {value === numericTotal ? "Exacto: " : ""}Q
-                    {value.toFixed(2)}
-                  </button>
-                ))}
-              </div>
+          <div className="quick-cash-container">
+            <span>Sugerencias rápidas:</span>
+            <div className="quick-cash-grid">
+              <button
+                className={`quick-cash-btn ${numericReceived === numericTotal && numericReceived > 0 ? "active" : ""}`}
+                onClick={() =>
+                  setCashReceived(
+                    numericTotal ? numericTotal.toFixed(2) : "0.00",
+                  )
+                }
+                type="button"
+              >
+                Exacto
+              </button>
+              {quickCashDenominations.map((amount) => (
+                <button
+                  className={`quick-cash-btn ${numericReceived === amount ? "active" : ""}`}
+                  key={amount}
+                  onClick={() => setCashReceived(amount.toFixed(2))}
+                  type="button"
+                >
+                  Q {amount}
+                </button>
+              ))}
             </div>
-          )}
+          </div>
 
           <div>
             <span>Vuelto</span>

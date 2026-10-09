@@ -1,6 +1,11 @@
 import { CartItemRow } from "./CartItemRow";
 
-export function CartPanel({ items, onRemove, onUpdateQuantity }) {
+export function CartPanel({
+  items,
+  onFocusSearch,
+  onRemove,
+  onUpdateQuantity,
+}) {
   return (
     <div className="cart-section">
       <h3>Carrito</h3>
@@ -24,6 +29,7 @@ export function CartPanel({ items, onRemove, onUpdateQuantity }) {
             <CartItemRow
               item={item}
               key={item.productId}
+              onFocusSearch={onFocusSearch}
               onRemove={onRemove}
               onUpdateQuantity={onUpdateQuantity}
             />
