@@ -1,3 +1,4 @@
+// frontend/src/app/router.jsx
 import { createBrowserRouter, Navigate } from "react-router-dom";
 
 import { AuthLayout } from "../layouts/AuthLayout";
@@ -7,6 +8,7 @@ import { ProtectedRoute } from "../routes/ProtectedRoute";
 import { RoleRoute } from "../routes/RoleRoute";
 import { LoginPage } from "../features/auth/pages/LoginPage";
 import { HomePage } from "../features/home/pages/HomePage";
+import { DashboardPage } from "../features/dashboard/pages/DashboardPage";
 import { InventoryPage } from "../features/inventory/pages/InventoryPage";
 import { PurchasesPage } from "../features/purchases/pages/PurchasesPage";
 import { PosPage } from "../features/pos/pages/PosPage";
@@ -30,6 +32,14 @@ export const router = createBrowserRouter([
         children: [
           { index: true, element: <Navigate to="/app" replace /> },
           { path: "app", element: <HomePage /> },
+          {
+            path: "dashboard",
+            element: (
+              <RoleRoute allowedRoles={["admin", "purchases"]}>
+                <DashboardPage />
+              </RoleRoute>
+            ),
+          },
           {
             path: "inventory",
             element: (
@@ -62,6 +72,10 @@ export const router = createBrowserRouter([
               </RoleRoute>
             ),
           },
+          // Redirecciones de conveniencia para rutas compuestas
+          { path: "app/reports", element: <Navigate to="/reports" replace /> },
+          { path: "app/purchases", element: <Navigate to="/purchases" replace /> },
+          { path: "app/inventory", element: <Navigate to="/inventory" replace /> },
           { path: "forbidden", element: <ForbiddenPage /> },
         ],
       },

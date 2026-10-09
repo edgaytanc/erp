@@ -1,32 +1,18 @@
+// frontend/src/features/home/pages/HomePage.jsx
 import { useEffect, useMemo, useState } from "react";
 import { useAuth } from "../../../contexts/AuthContext";
 import { extractApiErrorMessage } from "../../../lib/apiError";
 import { APP_ROLES } from "../../auth/constants/roles";
-import {
-  listStocks,
-  unwrapResults as unwrapInventoryResults,
-} from "../../inventory/api/inventoryApi";
-import {
-  listPurchases,
-  listSuppliers,
-  unwrapResults as unwrapPurchaseResults,
-} from "../../purchases/api/purchasesApi";
 import {
   closeCashRegister,
   getCurrentCashRegister,
   listSales,
   openCashRegister,
 } from "../../pos/api/salesApi";
-import {
-  getInventoryReport,
-  getPurchasesReport,
-  getSalesReport,
-} from "../../reports/api/reportsApi";
 
 import { unwrap } from "../components/DashboardCommon";
-import AdminDashboardView from "../components/AdminDashboardView";
 import CashierDashboardView from "../components/CashierDashboardView";
-import PurchasesDashboardView from "../components/PurchasesDashboardView";
+import DashboardPage from "../../dashboard/pages/DashboardPage";
 
 export function HomePage() {
   const { user } = useAuth();
@@ -45,9 +31,21 @@ export function HomePage() {
   const [error, setError] = useState("");
 
   const role = user?.role;
+  const isPurchasingOrAdmin =
+    role === APP_ROLES.ADMIN ||
+    role === APP_ROLES.PURCHASES ||
+    role === "purchasing";
 
   useEffect(() => {
     let isActive = true;
+
+    // Para Admin y Compras, DashboardPage gestiona su propia carga optimizada vía API dedicada
+    if (isPurchasingOrAdmin) {
+      setIsLoading(false);
+      return () => {
+        isActive = false;
+      };
+    }
 
     async function loadDashboard() {
       setIsLoading(true);
@@ -55,55 +53,6 @@ export function HomePage() {
 
       try {
         const requests = [];
-
-        if (role === APP_ROLES.ADMIN) {
-          requests.push(
-            getSalesReport().then((value) => ["salesReport", value]),
-            getPurchasesReport().then((value) => ["purchasesReport", value]),
-            getInventoryReport().then((value) => ["inventoryReport", value]),
-            listSales().then((value) => ["sales", unwrap(value)]),
-            listPurchases().then((value) => [
-              "purchases",
-              unwrapPurchaseResults(value),
-            ]),
-            listSuppliers().then((value) => [
-              "suppliers",
-              unwrapPurchaseResults(value),
-            ]),
-            listStocks({ low: "true", page_size: 8 }).then((value) => [
-              "lowStock",
-              unwrapInventoryResults(value),
-            ]),
-          );
-          if (user?.branch) {
-            requests.push(
-              getCurrentCashRegister().then((value) => [
-                "cashRegisterSession",
-                value.session,
-              ]),
-            );
-          }
-        }
-
-        if (role === APP_ROLES.PURCHASES) {
-          const stockParams = user?.branch
-            ? { branch: user.branch, low: "true", page_size: 8 }
-            : { low: "true", page_size: 8 };
-          requests.push(
-            listPurchases().then((value) => [
-              "purchases",
-              unwrapPurchaseResults(value),
-            ]),
-            listSuppliers().then((value) => [
-              "suppliers",
-              unwrapPurchaseResults(value),
-            ]),
-            listStocks(stockParams).then((value) => [
-              "lowStock",
-              unwrapInventoryResults(value),
-            ]),
-          );
-        }
 
         if (role === APP_ROLES.SALES) {
           requests.push(
@@ -147,7 +96,7 @@ export function HomePage() {
     return () => {
       isActive = false;
     };
-  }, [role, user?.branch]);
+  }, [role, isPurchasingOrAdmin, user?.branch]);
 
   async function handleOpenCashRegister(amount) {
     setIsCashRegisterBusy(true);
@@ -182,10 +131,16 @@ export function HomePage() {
   }
 
   const title = useMemo(() => {
-    if (role === APP_ROLES.PURCHASES) return "Dashboard de compras";
+    if (role === APP_ROLES.PURCHASES || role === "purchasing")
+      return "Dashboard de compras";
     if (role === APP_ROLES.SALES) return "Dashboard POS";
     return "Dashboard administrativo";
   }, [role]);
+
+  // Si el usuario es Administrador o Encargado de Compras, renderizamos el DashboardPage rediseñado
+  if (isPurchasingOrAdmin) {
+    return <DashboardPage />;
+  }
 
   return (
     <div className="dashboard-page">
@@ -202,18 +157,6 @@ export function HomePage() {
       ) : null}
       {error ? <div className="alert alert--error">{error}</div> : null}
 
-      {!isLoading && !error && role === APP_ROLES.ADMIN ? (
-        <AdminDashboardView
-          data={data}
-          isCashRegisterBusy={isCashRegisterBusy}
-          onCloseCashRegister={handleCloseCashRegister}
-          onOpenCashRegister={handleOpenCashRegister}
-          user={user}
-        />
-      ) : null}
-      {!isLoading && !error && role === APP_ROLES.PURCHASES ? (
-        <PurchasesDashboardView data={data} />
-      ) : null}
       {!isLoading && !error && role === APP_ROLES.SALES ? (
         <CashierDashboardView
           data={data}
@@ -226,3 +169,5 @@ export function HomePage() {
     </div>
   );
 }
+
+export default HomePage;
